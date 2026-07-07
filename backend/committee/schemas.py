@@ -63,6 +63,30 @@ class LLMAgentVerdict(BaseModel):
         )
 
 
+class ContrarianVerdict(BaseModel):
+    """Raw shape the Contrarian agent asks Gemini for. It plays a dual role
+    (README): it casts its own directional vote like any other specialist
+    (`decision`/`confidence`/`reasoning`/`evidence`), *and* it produces the
+    challenge/risk observations that drive the Debate Layer's confidence
+    revision pass — one LLM call covers both."""
+
+    decision: Decision
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str
+    evidence: list[str] = Field(default_factory=list)
+    challenge: str
+    risk_observations: list[str] = Field(default_factory=list)
+
+    def to_agent_output(self, agent: str = "Contrarian") -> "AgentOutput":
+        return AgentOutput(
+            agent=agent,
+            decision=self.decision,
+            confidence=self.confidence,
+            reasoning=self.reasoning,
+            evidence=self.evidence,
+        )
+
+
 class DebateResult(BaseModel):
     """Output of the Debate Layer (README §3): independent recommendations,
     the Contrarian's challenge, and the revised recommendations agents

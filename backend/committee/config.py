@@ -61,6 +61,13 @@ CONTEXT_RELEVANCE_BOOST = {
     "normal": {"Technical": 1.0, "News & Sentiment": 1.0, "Macro": 1.0, "Contrarian": 1.0},
 }
 
+# --- Debate Layer ------------------------------------------------------------
+# Max fraction by which the Contrarian's disagreement can damp another
+# agent's confidence during the revision pass (README step 4). Scaled by the
+# Contrarian's own confidence, so a low-confidence dissent barely moves
+# anything while a highly-confident one can roughly halve it.
+REVISION_DAMPING_FACTOR = 0.5
+
 # --- Risk Management Layer ---------------------------------------------------
 MAX_POSITION_ALLOCATION = 1.0  # fraction of buying power in a single stock
 HIGH_VOLATILITY_ANNUALIZED = 0.45  # GARCH-estimated annualized vol above this triggers a trim
