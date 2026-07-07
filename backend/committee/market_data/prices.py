@@ -10,7 +10,7 @@ import yfinance as yf
 DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "historical"
 
 
-def _cache_path(symbol: str, interval: str) -> Path:
+def cache_path(symbol: str, interval: str) -> Path:
     return DATA_DIR / f"{symbol}_{interval}.csv"
 
 
@@ -23,7 +23,7 @@ def fetch_ohlcv(symbol: str, period: str = "60d", interval: str = "5m", use_cach
     never a silent empty result mistaken for "no signal".
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    cache_path = _cache_path(symbol, interval)
+    path = cache_path(symbol, interval)
 
     try:
         df = yf.download(f"{symbol}.NS", period=period, interval=interval, progress=False, auto_adjust=True)
@@ -31,11 +31,11 @@ def fetch_ohlcv(symbol: str, period: str = "60d", interval: str = "5m", use_cach
             raise ValueError(f"empty OHLCV response for {symbol}")
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-        df.to_csv(cache_path)
+        df.to_csv(path)
         return df
     except Exception:
-        if use_cache_on_failure and cache_path.exists():
-            return pd.read_csv(cache_path, index_col=0, parse_dates=True)
+        if use_cache_on_failure and path.exists():
+            return pd.read_csv(path, index_col=0, parse_dates=True)
         raise
 
 
