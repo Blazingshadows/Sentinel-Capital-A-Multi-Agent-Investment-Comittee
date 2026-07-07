@@ -64,7 +64,10 @@ CONTEXT_RELEVANCE_BOOST = {
 # --- Risk Management Layer ---------------------------------------------------
 MAX_POSITION_ALLOCATION = 1.0  # fraction of buying power in a single stock
 HIGH_VOLATILITY_ANNUALIZED = 0.45  # GARCH-estimated annualized vol above this triggers a trim
+EXTREME_VOLATILITY_ANNUALIZED = 1.0  # above this, reject the trade outright
 VOLATILITY_TRIM_FACTOR = 0.5
+INTRADAY_BARS_PER_DAY = 75  # NSE 9:15-15:30 session / 5-min bars
+TRADING_DAYS_PER_YEAR = 252
 
 # --- NSE intraday equity retail cost model (fractions, not percentages) ----
 BROKERAGE_FLAT_CAP = 20.0
