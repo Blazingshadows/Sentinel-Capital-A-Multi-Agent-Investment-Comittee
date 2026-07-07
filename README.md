@@ -1,4 +1,5 @@
 # Autonomous Multi-Agent Investment Committee
+### PS #10 — Directional Confidence-Aware Consensus for Intraday Paper Trading (NSE/BSE)
 
 ## Problem Statement
 
@@ -17,53 +18,94 @@ The challenge is to build an Autonomous Multi-Agent Investment Committee capable
 - Analyzing market data
 - Forming independent opinions
 - Debating conflicting viewpoints
-- Reaching a confidence-aware consensus
+- Reaching a **Directional Confidence-Aware Consensus** (not majority vote, not confidence averaging)
 - Managing risk before capital deployment
-- Executing trades autonomously
+- Executing paper trades autonomously, intraday, on the Indian market
 
-The objective is not merely stock prediction, but the creation of a transparent and explainable decision-making system that mimics the behavior of a real-world investment committee.
+## Objective
+
+Build an Autonomous Multi-Agent Investment Committee that performs **real-time intraday paper trading on the Indian stock market (NSE/BSE)**, starting with **₹10,000 virtual capital** and **1:2 leverage**. The system must autonomously decide to **BUY, SELL, HOLD, WAIT, or SWITCH** stocks to **maximize end-of-day net profit (after all trading costs)** through explainable multi-agent reasoning.
+
+Explainability is a hard requirement, not a substitute for the profit objective: the committee is judged on realized, cost-adjusted returns, and every one of those decisions must be traceable to the reasoning that produced it.
+
+### Mandatory: Directional Confidence-Aware Consensus
+
+**Simple majority voting or confidence averaging is not allowed.**
+
+The final decision must use a Directional Confidence-Aware Consensus, where each agent's influence dynamically depends on all of the following:
+
+1. **Confidence** — the agent's own certainty in its call
+2. **Expertise** — how qualified the agent is for the current situation (e.g. a Technical agent's expertise is discounted on an earnings-driven move)
+3. **Historical reliability** — the agent's track record of being directionally correct
+4. **Trust** — a slower-moving, calibration-adjusted score built from reliability over time
+5. **Context relevance** — how applicable the agent's specialty is to the current market regime
+6. **Agreement / disagreement with other agents** — whether the agent's call is corroborated or contradicted by the rest of the committee
+
+Every trade must clearly explain **why** the consensus reached its decision, citing which agents drove it and why they were weighted as they were.
+
+---
+
+## Trading Rules
+
+| Parameter | Value |
+|---|---|
+| Market | NSE/BSE (Intraday) |
+| Virtual Capital | ₹10,000 |
+| Leverage | 1:2 |
+| Session Length | 4–6 hours (single trading day) |
+| Position Closure | All positions must be closed before market close |
+| Cost Accounting | Profit calculated after realistic trading costs (brokerage, taxes, charges) |
+
+### Decision Space
+
+Every cycle, the committee must output one of five actions per stock under consideration:
+
+- **BUY** — open/increase a long position
+- **SELL** — close/reduce a long position
+- **HOLD** — maintain the current position, no change
+- **WAIT** — take no position; insufficient conviction or unfavorable setup
+- **SWITCH** — exit the current holding and rotate capital into a higher-conviction alternative
 
 ---
 
 # Proposed Solution
 
-We propose an autonomous committee of specialized AI investment analysts, each responsible for evaluating the market from a unique perspective.
+We propose an autonomous committee of specialized AI investment analysts, each responsible for evaluating the market from a unique perspective, operating on a compressed intraday clock (4–6 hours, NSE/BSE).
 
 Instead of relying on a single predictive model, the system creates a structured decision-making process:
 
-1. Gather market information.
-2. Generate independent recommendations from specialist agents.
+1. Gather market information (NSE/BSE live/delayed feeds).
+2. Generate independent recommendations from specialist agents, each backed by a custom-built AI/ML tool.
 3. Conduct an argumentation and challenge phase.
-4. Aggregate recommendations through a confidence-aware orchestrator.
-5. Validate decisions through a dedicated risk manager.
-6. Execute paper trades.
-7. Track performance and continuously update trust scores.
+4. Aggregate recommendations through a **Directional Confidence-Aware Consensus orchestrator** (never majority vote or plain averaging).
+5. Validate decisions through a dedicated risk manager, respecting the ₹10,000 / 1:2 leverage constraints.
+6. Execute intraday paper trades.
+7. Track performance and continuously update trust, reliability, and calibration scores.
+8. Close all open positions before market close and report final, cost-adjusted results.
 
-The final output is not simply BUY/SELL/WAIT, but a capital allocation recommendation with supporting evidence and risk justification.
+The final output is not simply BUY/SELL/HOLD/WAIT/SWITCH, but a capital allocation recommendation with supporting evidence, agent-level attribution, and risk justification.
 
 ---
 
 # Core Design Principles
 
 ## Independent Reasoning
-
 Each agent must reason independently before seeing the opinions of other agents.
 
 ## Constructive Disagreement
+Disagreement is encouraged rather than avoided. Agreement/disagreement between agents is itself a signal that feeds the consensus weighting.
 
-Disagreement is encouraged rather than avoided.
-
-## Dynamic Trust
-
-Agent influence changes based on historical performance and context relevance.
+## Dynamic, Multi-Factor Trust
+Agent influence is never static and never a single number — it is the product of confidence, expertise, historical reliability, trust, context relevance, and inter-agent agreement.
 
 ## Explainability
-
-Every recommendation must be traceable to supporting evidence.
+Every recommendation, every HOLD/WAIT, and every no-trade decision must be traceable to supporting evidence.
 
 ## Risk First
+No trade can be executed without risk review and approval against the ₹10,000 capital base and 1:2 leverage limit.
 
-No trade can be executed without risk review and approval.
+## Cost-Aware Profit Maximization
+The committee is optimizing for end-of-day net profit after brokerage, taxes, and charges — not gross directional accuracy.
 
 ---
 
@@ -71,90 +113,38 @@ No trade can be executed without risk review and approval.
 
 ## 1. Market Data Layer
 
-Responsible for collecting and normalizing data.
+Responsible for collecting and normalizing NSE/BSE data.
 
 ### Inputs
-
-- Live / delayed stock prices
+- Live / delayed NSE/BSE stock prices
 - OHLCV data
 - Market indices
 - News headlines
 - Sector information
+- Corporate/policy/geopolitical events
 
 ### Output
-
 Unified market context object.
 
 ---
 
 ## 2. Specialist Agent Layer
 
-### Technical Analyst Agent
+Each specialist agent is backed by a **custom-built** AI/ML tool (APIs may be used as inputs, but the analytical logic must be built by the team, not a thin wrapper over a third-party signal). Together, the agents must cover all eight mandatory tool categories from the problem statement.
 
-Focus:
+| Agent | Mandatory Tool Category Covered | Focus | Output |
+|---|---|---|---|
+| Technical Analyst Agent | Technical Indicator Engine | RSI, MACD, moving averages, momentum | BUY/SELL/HOLD/WAIT/SWITCH, confidence, evidence |
+| News & Sentiment Agent | News & Sentiment Analysis | Financial news, earnings, corporate announcements | BUY/SELL/HOLD/WAIT/SWITCH, confidence, evidence |
+| Forecasting Agent | Time-Series / DL Forecasting | Short-horizon price/volatility forecasts (intraday) | Directional forecast, confidence, evidence |
+| Fundamental Analyst Agent | Fundamental Analysis | Valuation, earnings quality, balance-sheet signals | BUY/SELL/HOLD/WAIT/SWITCH, confidence, evidence |
+| Macro & Policy Agent | Policy & Geopolitical Impact | Rate decisions, government policy, geopolitical shocks | BUY/SELL/HOLD/WAIT/SWITCH, confidence, evidence |
+| Sector Intelligence Agent | Sector Intelligence | Sector rotation, peer-relative strength | BUY/SELL/HOLD/WAIT/SWITCH, confidence, evidence |
+| Opportunity Discovery Agent | Opportunity Discovery | Screens NSE/BSE universe for SWITCH candidates | Ranked alternative stock list, confidence |
+| Risk Prediction Agent | Risk Prediction | Forward-looking volatility/drawdown/tail-risk estimate | Risk score, confidence, evidence |
+| Contrarian Agent | — (cross-cutting) | Challenges consensus assumptions, surfaces blind spots | Counterarguments, risk observations, confidence adjustments |
 
-- RSI
-- MACD
-- Moving averages
-- Momentum
-
-Output:
-
-- BUY / SELL / WAIT
-- Confidence score
-- Supporting evidence
-
----
-
-### News & Sentiment Agent
-
-Focus:
-
-- Financial news
-- Earnings updates
-- Corporate announcements
-
-Output:
-
-- BUY / SELL / WAIT
-- Confidence score
-- Supporting evidence
-
----
-
-### Macro Analyst Agent
-
-Focus:
-
-- Sector trends
-- Market sentiment
-- Broader economic conditions
-
-Output:
-
-- BUY / SELL / WAIT
-- Confidence score
-- Supporting evidence
-
----
-
-### Contrarian Agent
-
-Purpose:
-
-Challenge consensus assumptions.
-
-Responsibilities:
-
-- Identify blind spots
-- Attack weak arguments
-- Surface alternative interpretations
-
-Output:
-
-- Counterarguments
-- Risk observations
-- Confidence adjustments
+All specialist agents (except the Contrarian) output a directional call from the full five-action space, a confidence score, and supporting evidence.
 
 ---
 
@@ -164,48 +154,65 @@ The debate layer enables structured interaction between agents.
 
 ### Flow
 
-Step 1:
-Independent recommendations.
+**Step 1** — Independent recommendations from all specialist agents.
+**Step 2** — Agents review opposing opinions and note agreement/disagreement with each peer.
+**Step 3** — Contrarian agent challenges assumptions, flags blind spots.
+**Step 4** — Agents may revise confidence scores based on the challenge.
 
-Step 2:
-Agents review opposing opinions.
-
-Step 3:
-Contrarian agent challenges assumptions.
-
-Step 4:
-Agents may revise confidence scores.
-
-Output:
-
-- Final committee recommendations
+### Output
+- Final committee recommendations (one of BUY/SELL/HOLD/WAIT/SWITCH)
 - Updated confidence levels
+- Per-pair agreement/disagreement matrix (feeds the consensus orchestrator)
 
 ---
 
-## 4. Consensus Orchestrator
+## 4. Consensus Orchestrator — Directional Confidence-Aware Consensus
 
-Responsible for synthesizing committee opinions.
+Responsible for synthesizing committee opinions using the mandatory multi-factor formula. **Never** a majority vote or plain confidence average.
 
 ### Inputs
-
-- Agent recommendations
+- Agent recommendations (BUY/SELL/HOLD/WAIT/SWITCH)
 - Confidence scores
-- Historical trust scores
-- Context relevance
+- Expertise weighting for current context
+- Historical reliability scores
+- Trust scores
+- Context relevance scores
+- Agreement/disagreement matrix from the Debate Layer
 
-### Output
+### Agent Influence Formula
 
-Portfolio allocation recommendation.
+```
+Agent Influence =
+    Confidence
+  × Expertise (context-weighted)
+  × Historical Reliability
+  × Trust Score
+  × Context Relevance
+  × Agreement Factor (peer corroboration / contradiction)
+```
 
-Example:
+The consensus verdict is the confidence-weighted resolution of all agent influences into a single directional call, with a committee-level confidence score.
+
+### Output — Per-Trade Report
+
+Every BUY / SELL / HOLD / WAIT / SWITCH decision must report:
 
 ```json
 {
   "symbol": "INFY",
+  "decision": "BUY",
   "allocation": 0.25,
-  "confidence": 0.74,
-  "decision": "BUY"
+  "directional_confidence": 0.74,
+  "agent_recommendations": [
+    {"agent": "Technical", "call": "BUY", "confidence": 0.82},
+    {"agent": "News", "call": "BUY", "confidence": 0.77},
+    {"agent": "Macro & Policy", "call": "WAIT", "confidence": 0.65}
+  ],
+  "consensus_verdict": "BUY",
+  "reasoning_and_evidence": "Momentum + earnings beat outweigh sector-level caution; contrarian flagged rally sustainability risk.",
+  "alternative_stocks_considered": ["TCS", "WIPRO"],
+  "critic_feedback": "Contrarian agent questioned sustainability of rally given sector weakness.",
+  "expected_risk_return": {"expected_return": 0.03, "risk_score": 0.41}
 }
 ```
 
@@ -213,18 +220,17 @@ Example:
 
 ## 5. Risk Management Layer
 
-Final approval authority.
+Final approval authority, enforcing the ₹10,000 capital base and 1:2 leverage limit.
 
 ### Responsibilities
-
-- Position size control
+- Position size control within leveraged capital
 - Exposure limits
-- Volatility checks
+- Volatility checks (informed by the Risk Prediction Agent)
 - Portfolio diversification
 - Capital preservation
+- Enforcing forced position closure before market close
 
 ### Actions
-
 - Approve trade
 - Reduce allocation
 - Reject trade
@@ -234,13 +240,13 @@ Final approval authority.
 ## 6. Execution Layer
 
 Responsible for:
-
-- Paper trade execution
+- Intraday paper trade execution on NSE/BSE
 - Portfolio updates
 - Transaction logging
+- Closing all open positions before market close
+- Deducting brokerage, taxes, and charges from realized P&L
 
-Outputs:
-
+### Outputs
 - Trade history
 - Portfolio state
 - Performance statistics
@@ -249,193 +255,113 @@ Outputs:
 
 # Dynamic Trust Framework
 
-Each agent maintains a trust score.
+Each agent maintains independently tracked scores:
 
-Trust is updated based on:
+- **Historical reliability** — hit rate of directionally correct calls
+- **Trust score** — slower-moving composite of reliability and calibration quality over time
+- **Context relevance** — how applicable the agent's specialty is right now (e.g. News agent relevance spikes around earnings)
+- **Expertise weighting** — situational competence for the current market regime
+- **Agreement factor** — how corroborated or contradicted the agent's call is by the rest of the committee this cycle
 
-- Historical accuracy
-- Context relevance
-- Risk-adjusted outcomes
-- Calibration quality
-
-Example:
-
-```
-Agent Influence =
-Confidence
-× Trust Score
-× Context Relevance
-```
-
-This prevents static voting and enables adaptive committee behavior.
+This prevents static voting and enables adaptive, non-uniform committee behavior, in compliance with the "no majority vote / no confidence averaging" mandate.
 
 ---
 
 # Evaluation Metrics
 
 ## Financial Metrics
-
-### Portfolio Return
-
-Overall portfolio growth.
-
-### Sharpe Ratio
-
-Risk-adjusted performance.
-
-### Maximum Drawdown
-
-Largest portfolio decline.
-
-### Win Rate
-
-Percentage of profitable trades.
-
----
+- **Final Portfolio Value**
+- **Net Profit** (after brokerage, taxes & charges)
+- **Portfolio Growth** (% change from ₹10,000 base)
+- **Sharpe Ratio**
+- **Maximum Drawdown**
+- **Win Rate**
 
 ## Agent Metrics
-
-### Agent Accuracy
-
-Percentage of correct directional predictions.
-
-### Confidence Calibration
-
-How well confidence aligns with outcomes.
-
-### Trust Stability
-
-Consistency of trust score updates.
-
-### Debate Contribution
-
-Impact of agent challenges on final decisions.
-
----
+- **Agent Accuracy** — % of correct directional predictions
+- **Confidence Calibration** — how well confidence aligns with outcomes
+- **Trust Stability** — consistency of trust score updates
+- **Debate Contribution** — impact of agent challenges on final decisions
 
 ## Consensus Metrics
-
-### Consensus Quality
-
-Performance compared to individual agents.
-
-### Decision Diversity
-
-Measure of disagreement and viewpoint diversity.
-
-### Allocation Efficiency
-
-Capital deployed relative to confidence.
-
----
+- **Consensus Quality** — performance vs. individual agents
+- **Decision Diversity** — measure of disagreement and viewpoint diversity
+- **Allocation Efficiency** — capital deployed relative to confidence
 
 ## Risk Metrics
-
-### Risk Compliance
-
-Percentage of trades approved under risk rules.
-
-### Exposure Control
-
-Adherence to position limits.
-
-### Portfolio Stability
-
-Volatility of portfolio returns.
+- **Risk Compliance** — % of trades approved under risk rules (₹10,000 / 1:2 leverage)
+- **Exposure Control** — adherence to position limits
+- **Portfolio Stability** — volatility of portfolio returns
 
 ---
 
 # Success Criteria
 
 ## Minimum Viable Success
-
-- 4 specialist agents operational
+- All 8 mandatory AI/ML tool categories represented (custom-built, not solely API wrappers)
 - Structured debate workflow
-- Consensus generation
-- Risk manager approval layer
-- Paper trading execution
-- Explainable trade logs
-
----
+- Directional Confidence-Aware Consensus generation (no majority vote / averaging)
+- Risk manager approval layer enforcing ₹10,000 capital and 1:2 leverage
+- Intraday paper trading execution on NSE/BSE
+- Explainable trade logs, including full per-trade report fields
 
 ## Good Success
-
-- Dynamic trust scoring
+- Full 6-factor dynamic trust/influence scoring
 - Historical performance tracking
-- Portfolio allocation recommendations
+- Portfolio allocation recommendations across the 5-action decision space (incl. SWITCH)
 - Interactive committee dashboard
-
----
+- All positions verifiably closed before market close each session
 
 ## Excellent Success
-
 - Adaptive trust updates
-- Multi-stock portfolio management
+- Multi-stock portfolio management with live SWITCH decisions
 - Historical replay evaluation
-- Fully explainable committee reasoning
-- Real-time paper trading demonstration
+- Fully explainable committee reasoning for every trade **and** every no-trade (WAIT/HOLD)
+- Real-time paper trading demonstration with complete decision log and cost-adjusted P&L
 
 ---
 
 # Demo Scenario
 
 ## Input
-
-Stock: INFY
+Stock: INFY (NSE)
 
 Market Data:
 - Positive earnings
 - Rising momentum
 - Sector weakness
-
----
+- Trading session: intraday, 4–6 hours, ₹10,000 virtual capital, 1:2 leverage
 
 ## Committee Opinions
-
-Technical Agent:
-BUY (0.82)
-
-News Agent:
-BUY (0.77)
-
-Macro Agent:
-WAIT (0.65)
-
-Contrarian Agent:
-Questions sustainability of rally
-
----
+- Technical Agent: BUY (0.82)
+- News Agent: BUY (0.77)
+- Fundamental Agent: BUY (0.70)
+- Macro & Policy Agent: WAIT (0.65)
+- Sector Intelligence Agent: WAIT (0.60)
+- Risk Prediction Agent: Moderate volatility flagged
+- Contrarian Agent: Questions sustainability of rally
 
 ## Consensus
-
-Recommended Allocation:
-25% Portfolio
-
-Confidence:
-74%
-
----
+Recommended Allocation: 25% of virtual capital
+Directional Confidence: 74%
+Decision: BUY
 
 ## Risk Review
-
-Position approved.
-
-Allocation reduced to 20% due to volatility.
-
----
+Position approved. Allocation reduced to 20% due to volatility and leverage exposure limits.
 
 ## Execution
+BUY INFY intraday → Portfolio updated → Position flagged for mandatory closure before market close → Decision, including agent-wise votes, critic feedback, and expected risk/return, stored in the audit log.
 
-BUY INFY
-
-Portfolio Updated.
-
-Decision stored in audit log.
+## End-of-Session Report
+- Final Portfolio Value
+- Net Profit (after brokerage, taxes & charges)
+- Portfolio Growth %
+- Trade History
+- Explainable reasoning for every trade and every WAIT/HOLD decision
+- Complete decision log
 
 ---
 
 # Key Innovation
 
-Most AI trading systems attempt to predict the market using a single model.
-
-Our system instead models the collaborative decision-making process of a real investment committee where multiple experts debate, challenge assumptions, build trust over time, and allocate capital through explainable consensus.
+Most AI trading systems attempt to predict the market using a single model. Our system instead models the collaborative decision-making process of a real investment committee — where multiple specialist experts debate, challenge assumptions, build multi-factor trust over time, and allocate leveraged capital through a Directional Confidence-Aware Consensus that is explainable down to the individual agent vote — while operating under the real constraints of intraday NSE/BSE paper trading: fixed capital, leverage, a hard session clock, and realistic trading costs.
