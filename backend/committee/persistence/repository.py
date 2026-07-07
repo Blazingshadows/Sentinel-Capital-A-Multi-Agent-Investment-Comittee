@@ -3,7 +3,7 @@ schemas everything else in the committee already speaks. Callers never
 construct a `models.*` row by hand.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -120,13 +120,13 @@ def update_trust_score(session: Session, agent: str) -> float:
     row = session.get(models.TrustScore, agent)
     if row is None:
         row = models.TrustScore(agent=agent, trust_score=smoothed, total_predictions=total,
-                                 correct_predictions=correct, updated_at=datetime.utcnow())
+                                 correct_predictions=correct, updated_at=datetime.now(timezone.utc))
         session.add(row)
     else:
         row.trust_score = smoothed
         row.total_predictions = total
         row.correct_predictions = correct
-        row.updated_at = datetime.utcnow()
+        row.updated_at = datetime.now(timezone.utc)
     session.commit()
     return smoothed
 

@@ -4,7 +4,7 @@ Layer's approved allocation and applies real trading costs; never trades
 more than what Risk approved."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.committee.config import BUYING_POWER
 from backend.committee.execution.cost_model import apply_costs
@@ -20,7 +20,7 @@ class Portfolio:
         position_value = sum(qty * prices.get(symbol, 0.0) for symbol, qty in self.positions.items())
         portfolio_value = self.cash + position_value
         return PortfolioSnapshot(
-            ts=datetime.utcnow(),
+            ts=datetime.now(timezone.utc),
             cash=self.cash,
             positions=dict(self.positions),
             portfolio_value=portfolio_value,

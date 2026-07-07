@@ -5,7 +5,7 @@ the single pipeline both live cycles (`run_cycle`) and Replay Mode
 alternate way of producing a `MarketContext`, never a separate code path.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -34,7 +34,7 @@ def _latest_bar_direction(ohlcv: pd.DataFrame) -> int:
 
 def process_context(session: Session, portfolio: Portfolio, context: MarketContext, cycle_ts: datetime | None = None) -> tuple[DecisionLog, float]:
     price = context.latest_price
-    cycle_ts = cycle_ts or datetime.utcnow()
+    cycle_ts = cycle_ts or datetime.now(timezone.utc)
 
     actual_direction = _latest_bar_direction(context.ohlcv)
     repository.backfill_prediction_outcomes(session, context.symbol, before=cycle_ts, actual_direction=actual_direction)
