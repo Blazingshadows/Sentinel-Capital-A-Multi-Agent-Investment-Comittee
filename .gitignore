@@ -6,8 +6,10 @@ venv/
 *.db
 data/historical/*
 data/models/*
+data/news_corpus/*
 !data/historical/.gitkeep
 !data/models/.gitkeep
+!data/news_corpus/.gitkeep
 node_modules/
 dist/
 frontend/.vite/
