@@ -43,6 +43,26 @@ class AgentOutput(BaseModel):
         return sign * self.confidence
 
 
+class LLMAgentVerdict(BaseModel):
+    """Raw shape an LLM-backed agent asks Gemini to fill in — no `agent`
+    field (the caller already knows which agent it is) and no computed
+    fields, so the generation schema sent to the model stays unambiguous."""
+
+    decision: Decision
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str
+    evidence: list[str] = Field(default_factory=list)
+
+    def to_agent_output(self, agent: str) -> "AgentOutput":
+        return AgentOutput(
+            agent=agent,
+            decision=self.decision,
+            confidence=self.confidence,
+            reasoning=self.reasoning,
+            evidence=self.evidence,
+        )
+
+
 class DebateResult(BaseModel):
     """Output of the Debate Layer (README §3): independent recommendations,
     the Contrarian's challenge, and the revised recommendations agents
