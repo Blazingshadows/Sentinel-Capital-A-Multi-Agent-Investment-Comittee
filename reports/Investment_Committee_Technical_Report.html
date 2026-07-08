@@ -1,0 +1,447 @@
+<title>Investment Committee — Technical Architecture Report</title>
+<style>
+  :root {
+    --paper: #FAFAF8;
+    --paper-panel: #EFF1F4;
+    --ink: #1B2430;
+    --ink-soft: #4A5568;
+    --ink-faint: #7A8494;
+    --rule: #D8DCE1;
+    --accent: #2A4B7C;
+    --accent-soft: #E5EAF3;
+    --amber: #9A6324;
+    --amber-soft: #F4ECDD;
+    --mono-bg: #1B2430;
+    --mono-fg: #DCE3EC;
+  }
+
+  * { box-sizing: border-box; }
+
+  @page {
+    size: A4;
+    margin: 22mm 20mm 20mm 20mm;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Segoe UI", -apple-system, sans-serif;
+    font-size: 10.4pt;
+    line-height: 1.5;
+  }
+
+  h1, h2, h3 {
+    font-family: Cambria, "Iowan Old Style", Georgia, serif;
+    font-weight: 600;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  code, .mono, .formula, table.figures td {
+    font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Cover ---------- */
+  .cover {
+    height: 245mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    page-break-after: always;
+  }
+
+  .cover-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 10mm;
+  }
+
+  .cover-mid { padding: 14mm 0; }
+
+  .cover-kicker {
+    font-size: 9.5pt;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 8mm;
+  }
+
+  .cover h1 { font-size: 32pt; line-height: 1.12; margin: 0 0 6mm 0; max-width: 16ch; }
+  .cover-sub { font-size: 13pt; color: var(--ink-soft); max-width: 44ch; margin: 0 0 8mm 0; }
+
+  .cover-bottom {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10mm;
+    border-top: 1px solid var(--rule);
+    padding-top: 8mm;
+  }
+  .cover-bottom .label { font-size: 8pt; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 2mm; }
+  .cover-bottom .value { font-size: 10.5pt; color: var(--ink); }
+
+  /* ---------- Body ---------- */
+  section { margin-bottom: 8.5mm; }
+  section.avoid-break { page-break-inside: avoid; }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 4mm;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: 2mm;
+    margin-bottom: 4.5mm;
+  }
+  .section-num { font-family: Cambria, Georgia, serif; font-size: 9pt; color: var(--accent); font-weight: 600; }
+  .section-head h2 { font-size: 14.5pt; margin: 0; }
+  .section-head h3 { font-size: 12pt; margin: 6mm 0 2mm 0; }
+
+  p { margin: 0 0 3mm 0; color: var(--ink); max-width: 70ch; }
+  .lede { font-size: 11pt; color: var(--ink-soft); max-width: 68ch; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 5mm; max-width: 68ch; }
+  li { margin-bottom: 1.3mm; }
+  strong { color: var(--ink); font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 3mm 0 5mm 0;
+    font-size: 9.4pt;
+  }
+  th {
+    text-align: left;
+    font-size: 7.8pt;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    padding: 2mm 3mm;
+    border-bottom: 1px solid var(--ink);
+  }
+  td { padding: 2mm 3mm; border-bottom: 1px solid var(--rule); color: var(--ink-soft); vertical-align: top; }
+  tr:last-child td { border-bottom: 1.5px solid var(--ink); }
+  td.key { color: var(--ink); font-weight: 600; }
+
+  /* formula callout */
+  .formula-box {
+    background: var(--mono-bg);
+    color: var(--mono-fg);
+    border-radius: 3px;
+    padding: 4mm 5mm;
+    margin: 3mm 0 4mm 0;
+    font-family: Consolas, Menlo, monospace;
+    font-size: 9.2pt;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  .formula-box .comment { color: #8FA3BE; }
+  .formula-box .kw { color: #7FC9B9; }
+
+  .note {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 3.5mm 5mm;
+    margin: 3mm 0;
+    font-size: 9.4pt;
+    color: var(--ink-soft);
+  }
+  .note strong { color: var(--ink); }
+
+  .agent-card {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 2px;
+    padding: 3.5mm 5mm;
+    margin-bottom: 3mm;
+  }
+  .agent-card .agent-name {
+    font-family: Cambria, Georgia, serif;
+    font-weight: 600;
+    font-size: 10.8pt;
+    color: var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .agent-card .agent-tag {
+    font-family: "Segoe UI", sans-serif;
+    font-size: 7.6pt;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    background: var(--accent-soft);
+    padding: 0.8mm 2.2mm;
+    border-radius: 2px;
+  }
+  .agent-card p { margin: 1.5mm 0 0 0; font-size: 9.4pt; }
+
+  /* pipeline diagram */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 1.5mm;
+    margin: 4mm 0 6mm 0;
+  }
+  .pipe-stage {
+    flex: 1 1 auto;
+    min-width: 26mm;
+    background: var(--accent-soft);
+    border: 1px solid #C6D2E4;
+    border-radius: 2px;
+    padding: 3mm 3mm;
+    text-align: center;
+  }
+  .pipe-stage .stage-num { font-size: 7pt; color: var(--accent); font-weight: 700; letter-spacing: 0.05em; }
+  .pipe-stage .stage-name { font-size: 8.6pt; color: var(--ink); font-weight: 600; margin-top: 1mm; line-height: 1.25; }
+  .pipe-arrow { display: flex; align-items: center; color: var(--ink-faint); font-size: 11pt; padding: 0 0.5mm; }
+
+  code.inline {
+    background: var(--paper-panel);
+    padding: 0.3mm 1.3mm;
+    border-radius: 2px;
+    font-size: 9.3pt;
+    color: var(--accent);
+  }
+
+  footer.page-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 7.5pt;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--rule);
+    padding-top: 2mm;
+    margin-top: 10mm;
+  }
+
+  .pagebreak { page-break-before: always; }
+</style>
+
+<div class="cover">
+  <div class="cover-top">
+    <span>Investment Committee — Technical Report</span>
+    <span>Prepared for CFO Review</span>
+  </div>
+  <div class="cover-mid">
+    <div class="cover-kicker">Technical Architecture &amp; Algorithms</div>
+    <h1>Investment Committee</h1>
+    <p class="cover-sub">Model integration, the consensus algorithm, risk sizing, and the execution pipeline — with the exact thresholds and formulas in use.</p>
+  </div>
+  <div class="cover-bottom">
+    <div><div class="label">Document</div><div class="value">Technical Architecture Report</div></div>
+    <div><div class="label">Date</div><div class="value">8 July 2026</div></div>
+    <div><div class="label">Companion Document</div><div class="value">Business Briefing</div></div>
+  </div>
+</div>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">1</span><h2>System Overview</h2></div>
+  <p class="lede">Each five-minute cycle pushes every watchlist symbol through the same nine-stage pipeline: data → five independent agent evaluations → a debate pass → consensus scoring → risk sizing → cross-symbol capital allocation → simulated execution → persistence → the audit/dashboard layer.</p>
+  <div class="pipeline">
+    <div class="pipe-stage"><div class="stage-num">01</div><div class="stage-name">Data Ingestion</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage"><div class="stage-num">02</div><div class="stage-name">5-Agent Evaluation</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage"><div class="stage-num">03</div><div class="stage-name">Debate Layer</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage"><div class="stage-num">04</div><div class="stage-name">Consensus Orchestrator</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage"><div class="stage-num">05</div><div class="stage-name">Risk Manager</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage"><div class="stage-num">06</div><div class="stage-name">Cross-Symbol Allocator</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage"><div class="stage-num">07</div><div class="stage-name">Execution</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage"><div class="stage-num">08</div><div class="stage-name">Audit / Dashboard</div></div>
+  </div>
+  <p style="font-size:9pt;color:var(--ink-faint);">Implemented in <code class="inline">backend/committee/orchestration/{cycle,loop}.py</code>, run once per symbol per five-minute cycle across the full watchlist.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">2</span><h2>Data Layer</h2></div>
+  <p>OHLCV bars are pulled via <strong>yfinance</strong> (<code class="inline">market_data/prices.py</code>) at 5-minute resolution for live decisioning. Each fetch is merged into a growing per-symbol cache — <code class="inline">data/historical/{SYMBOL}_{interval}.csv</code> — with duplicate timestamps resolved in favor of the newer pull, so the effective history accumulates past yfinance's ~60-day intraday window limit over time. A separate, coarser cache (15-minute bars, 60-day window) feeds offline model training via <code class="inline">scripts/train_forecasting_model.py</code>. If a live fetch fails, the pipeline falls back to the last cached bars rather than erroring the cycle. News comes from public RSS (Moneycontrol, Economic Times) via <code class="inline">market_data/news.py</code>.</p>
+</section>
+
+<div class="pagebreak"></div>
+
+<section>
+  <div class="section-head"><span class="section-num">3</span><h2>The Five Agents</h2></div>
+  <p>A deliberately heterogeneous committee: one rule-based, two LLM-backed, one adversarial LLM, one gradient-boosted tree model — chosen so the agents fail in different ways rather than sharing blind spots.</p>
+
+  <div class="agent-card">
+    <div class="agent-name">Technical <span class="agent-tag">Rule-Based</span></div>
+    <p>Weighted sum over RSI, EMA-cross, MACD, and momentum signals: weights <code class="inline">0.3 / 0.3 / 0.2 / 0.2</code>, clipped to <code class="inline">[-1, 1]</code>. Below <code class="inline">|score| &lt; 0.15</code> (<code class="inline">WAIT_BAND</code>) the agent abstains. Pure pandas/numpy, no external calls. <code class="inline">agents/technical.py</code></p>
+  </div>
+  <div class="agent-card">
+    <div class="agent-name">News &amp; Sentiment <span class="agent-tag">LLM — Gemini</span></div>
+    <p>Reads recent headlines for the symbol and scores sentiment/direction. Routed via <code class="inline">llm/router.py</code> to Gemini (<code class="inline">gemini-1.5-flash</code>). Context relevance is boosted 1.5× on earnings days. <code class="inline">agents/news_sentiment.py</code></p>
+  </div>
+  <div class="agent-card">
+    <div class="agent-name">Macro <span class="agent-tag">LLM — OpenAI</span></div>
+    <p>Weighs rates, policy, and sector-wide conditions. Routed to OpenAI (<code class="inline">gpt-5-mini</code>). Context relevance boosted 1.8× on RBI policy days. <code class="inline">agents/macro.py</code></p>
+  </div>
+  <div class="agent-card">
+    <div class="agent-name">Forecasting <span class="agent-tag">LightGBM</span></div>
+    <p>Multiclass classifier (bearish / neutral / bullish) trained offline on lagged returns (1,2,3,5,10 bars), RSI, MACD histogram, EMA20–50 diff, rolling volatility, and volume change; predicts 3 bars ahead. Zero language reasoning — pure statistical pattern-matching, deliberately independent from the LLM agents. <code class="inline">agents/forecasting.py</code>, trained by <code class="inline">scripts/train_forecasting_model.py</code></p>
+  </div>
+  <div class="agent-card">
+    <div class="agent-name">Contrarian <span class="agent-tag">LLM — Anthropic</span></div>
+    <p>Runs on Claude Haiku (<code class="inline">claude-haiku-4-5</code>) — a different provider on purpose, so its disagreement reflects a genuinely different model rather than one model role-playing four personas. Issues its own vote plus an explicit challenge and risk observations, consumed by the Debate Layer below. <code class="inline">debate/contrarian.py</code></p>
+  </div>
+
+  <table class="figures">
+    <tr><th>Agent</th><th>Base Expertise</th><th>Provider</th></tr>
+    <tr><td class="key">Technical</td><td>1.2</td><td>—</td></tr>
+    <tr><td class="key">News &amp; Sentiment</td><td>1.0</td><td>Gemini (gemini-1.5-flash)</td></tr>
+    <tr><td class="key">Macro</td><td>0.8</td><td>OpenAI (gpt-5-mini)</td></tr>
+    <tr><td class="key">Forecasting</td><td>1.0</td><td>LightGBM (local)</td></tr>
+    <tr><td class="key">Contrarian</td><td>0.6</td><td>Anthropic (claude-haiku-4-5)</td></tr>
+  </table>
+  <p style="font-size:9pt;color:var(--ink-faint);">Source: <code class="inline">config.py::BASE_EXPERTISE</code>, <code class="inline">AGENT_PROVIDER_MAP</code>.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">4</span><h2>Volatility-Scaled Forecasting Labels</h2></div>
+  <p>Training labels for the Forecasting agent scale to each stock's own volatility rather than a fixed return threshold, so a calm stock's noise and a volatile stock's real moves aren't pooled under one cutoff:</p>
+  <div class="formula-box"><span class="comment"># agents/forecasting.py :: build_labels</span><br>
+horizon_vol = rolling_std(returns, window=10) * sqrt(lookahead=3)<br>
+deadzone    = max(0.5 * horizon_vol, 0.0005)   <span class="comment"># floor</span><br>
+label       = <span class="kw">+1</span> if forward_return_3bar &gt;  deadzone<br>
+            <span class="kw">-1</span> if forward_return_3bar &lt; -deadzone<br>
+            <span class="kw"> 0</span> otherwise (neutral)</div>
+  <p style="font-size:9pt;color:var(--ink-faint);">Constants: <code class="inline">FORECAST_VOLATILITY_WINDOW=10</code>, <code class="inline">FORECAST_LOOKAHEAD_BARS=3</code>, <code class="inline">FORECAST_DEADZONE_VOL_MULTIPLIER=0.5</code>, <code class="inline">FORECAST_DEADZONE_MIN_RETURN=0.0005</code>.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">5</span><h2>Debate Layer</h2></div>
+  <p>Before consensus is computed, any agent whose vote disagrees with the Contrarian has its confidence damped, scaled by the Contrarian's own confidence — so a low-confidence dissent barely moves anything, while a highly confident one can roughly halve it:</p>
+  <div class="formula-box"><span class="comment"># debate/engine.py</span><br>
+revised_confidence = confidence * (1 - contrarian_confidence * REVISION_DAMPING_FACTOR)<br>
+<span class="comment"># REVISION_DAMPING_FACTOR = 0.5</span></div>
+</section>
+
+<div class="pagebreak"></div>
+
+<section>
+  <div class="section-head"><span class="section-num">6</span><h2>Consensus Algorithm</h2></div>
+  <p>Each agent emits a signed vote — positive confidence for BUY, negative for SELL, zero for WAIT. Votes are combined into a single <strong>Directional Confidence Score (DCS)</strong>, weighted by each agent's influence:</p>
+  <div class="formula-box"><span class="comment"># trust/scoring.py + consensus/orchestrator.py</span><br>
+influence_i  = confidence_i * trust_i * context_relevance_i<br>
+norm_influence_i = influence_i / sum(influence_j for all agents j)<br>
+DCS = sum(norm_influence_i * signed_vote_i)   <span class="comment"># in [-1, 1]</span><br><br>
+<span class="kw">if</span> |DCS| &lt; DECISION_THRESHOLD_WAIT (0.15):  <span class="kw">WAIT</span><br>
+<span class="kw">else</span>: BUY/SELL, allocation = min(|DCS| * LEVERAGE, LEVERAGE)</div>
+  <p><strong>Trust score</strong> is a Laplace-smoothed historical hit rate, updated every cycle by checking whether the agent's prior call matched the next 2-bar price direction:</p>
+  <div class="formula-box"><span class="comment"># persistence/repository.py :: update_trust_score</span><br>
+trust = (correct_calls + TRUST_PRIOR * TRUST_SMOOTHING) / (total_calls + TRUST_SMOOTHING)<br>
+<span class="comment"># TRUST_PRIOR = 0.5, TRUST_SMOOTHING = 2.0 — starts neutral, converges with evidence</span></div>
+  <p><strong>Context relevance</strong> = <code class="inline">BASE_EXPERTISE</code> (Section 3 table) × a situational multiplier keyed off a per-cycle context flag — <code class="inline">earnings_day</code> boosts News &amp; Sentiment 1.5×, <code class="inline">rbi_policy_day</code> boosts Macro 1.8×, otherwise all multipliers are 1.0.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">7</span><h2>Risk Management Layer</h2></div>
+  <p>An independent GARCH(1,1)-estimated annualized volatility (<code class="inline">risk/volatility.py</code>) gates every consensus decision before it can become an order:</p>
+  <table class="figures">
+    <tr><th>Condition</th><th>Action</th><th>Constant</th></tr>
+    <tr><td>Annualized vol &gt; 100%</td><td class="key">Reject trade outright</td><td>EXTREME_VOLATILITY_ANNUALIZED = 1.0</td></tr>
+    <tr><td>Annualized vol &gt; 45%</td><td class="key">Trim allocation 50%</td><td>HIGH_VOLATILITY_ANNUALIZED = 0.45 / VOLATILITY_TRIM_FACTOR = 0.5</td></tr>
+    <tr><td>Any approved trade</td><td class="key">Cap at 100% of buying power</td><td>MAX_POSITION_ALLOCATION = 1.0</td></tr>
+  </table>
+  <p style="font-size:9pt;color:var(--ink-faint);">GARCH volatility is annualized from 5-minute bars using <code class="inline">INTRADAY_BARS_PER_DAY=75</code> and <code class="inline">TRADING_DAYS_PER_YEAR=252</code>. <code class="inline">risk/manager.py</code></p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">8</span><h2>Cross-Symbol Capital Allocator</h2></div>
+  <p>Per-symbol risk sizing is computed independently and can, in aggregate, request more capital than is available. The allocator (<code class="itself" class="inline">orchestration/allocator.py</code>, run after per-symbol risk evaluation and before execution) reconciles this confidence-weighted rather than first-come-first-served:</p>
+  <div class="formula-box"><span class="comment"># orchestration/allocator.py</span><br>
+headroom = BUYING_POWER - current_gross_exposure<br>
+<span class="kw">for</span> symbols increasing exposure, if sum(incremental_needs) &gt; headroom:<br>
+&nbsp;&nbsp;share_i = confidence_i / sum(confidence_j for needy symbols j)<br>
+&nbsp;&nbsp;final_allocation_i = (current_gross_i + headroom * share_i) / BUYING_POWER<br>
+&nbsp;&nbsp;verdict_i = REDUCE<br>
+<span class="comment"># symbols reducing exposure are never throttled</span></div>
+</section>
+
+<div class="pagebreak"></div>
+
+<section>
+  <div class="section-head"><span class="section-num">9</span><h2>Execution &amp; Cost Model</h2></div>
+  <p>Execution (<code class="inline">execution/portfolio.py</code>) is fully simulated — no broker API is present anywhere in the codebase. It trades only the delta versus the current in-memory position, against a virtual portfolio seeded at <code class="inline">CAPITAL = ₹10,000 × LEVERAGE = 2 → BUYING_POWER = ₹20,000</code>. Every fill applies the NSE intraday retail cost schedule (<code class="inline">execution/cost_model.py</code>):</p>
+  <table class="figures">
+    <tr><th>Cost Component</th><th>Rate</th><th>Applies To</th></tr>
+    <tr><td class="key">Brokerage</td><td>0.03%, capped at ₹20</td><td>Both sides</td></tr>
+    <tr><td class="key">STT</td><td>0.025%</td><td>Sell side only</td></tr>
+    <tr><td class="key">Exchange transaction charge</td><td>0.00297%</td><td>Both sides</td></tr>
+    <tr><td class="key">SEBI charge</td><td>₹10 / crore</td><td>Both sides</td></tr>
+    <tr><td class="key">Stamp duty</td><td>0.003%</td><td>Buy side only</td></tr>
+    <tr><td class="key">GST</td><td>18%</td><td>On brokerage + exchange charge</td></tr>
+    <tr><td class="key">Slippage</td><td>0.02%–0.05% (midpoint applied)</td><td>Both sides — deterministic approximation, not a market-impact model</td></tr>
+  </table>
+  <p>There is also a <strong>Replay Mode</strong> (<code class="inline">replay/player.py</code>) that streams cached historical bars through the identical pipeline at accelerated speed — a lightweight backtester reusing the live code path — plus a <strong>vectorbt SMA-crossover baseline</strong> (<code class="inline">baseline/vectorbt_baseline.py</code>, <code class="inline">scripts/compare_baseline.py</code>) used purely as a performance benchmark, not part of the live decision path.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">10</span><h2>Audit &amp; API Layer</h2></div>
+  <p>P&amp;L is computed mark-to-market rather than by summing realized trade cash flows, so it correctly includes unrealized P&amp;L on open positions (<code class="inline">audit/report.py::summarize_pnl</code>):</p>
+  <div class="formula-box"><span class="comment"># audit/report.py</span><br>
+net_pnl   = portfolio_value (mark-to-market) - starting_capital<br>
+gross_pnl = net_pnl + total_costs   <span class="comment"># adds back all costs actually charged</span><br>
+growth_pct = (net_pnl / starting_capital) * 100</div>
+  <p>Backend is <strong>FastAPI</strong> (<code class="inline">api/main.py</code>), CORS-scoped to the local Vite dev origin only:</p>
+  <table class="figures">
+    <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+    <tr><td class="key">/health</td><td>GET</td><td>Liveness check</td></tr>
+    <tr><td class="key">/cycle/{symbol}</td><td>POST</td><td>Run one committee cycle for a symbol</td></tr>
+    <tr><td class="key">/watchlist/run</td><td>POST</td><td>Run one cycle across the full watchlist</td></tr>
+    <tr><td class="key">/decisions</td><td>GET</td><td>Full decision log — every agent vote, debate, consensus, risk verdict</td></tr>
+    <tr><td class="key">/trades</td><td>GET</td><td>Executed trade history</td></tr>
+    <tr><td class="key">/portfolio</td><td>GET</td><td>Current cash and open positions</td></tr>
+    <tr><td class="key">/portfolio/curve</td><td>GET</td><td>Portfolio value over time (for the chart)</td></tr>
+    <tr><td class="key">/report</td><td>GET</td><td>Gross/costs/net P&amp;L summary + per-symbol cost breakdown</td></tr>
+  </table>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">11</span><h2>Frontend</h2></div>
+  <p>Vite + TypeScript, vanilla DOM (no framework) — <code class="inline">frontend/src/main.ts</code>. Renders stat tiles (cash, gross/net P&amp;L, growth %, costs, open positions, trade count), a portfolio value line chart, a decisions table with a click-through detail panel showing every agent's vote and reasoning plus the Contrarian's challenge, and a full trade log.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">12</span><h2>Tech Stack</h2></div>
+  <table class="figures">
+    <tr><th>Layer</th><th>Libraries</th></tr>
+    <tr><td class="key">API</td><td>FastAPI, uvicorn, pydantic-settings</td></tr>
+    <tr><td class="key">Data</td><td>SQLAlchemy 2.0 (SQLite), pandas, numpy</td></tr>
+    <tr><td class="key">ML</td><td>scikit-learn, lightgbm, arch (GARCH), vectorbt (baseline)</td></tr>
+    <tr><td class="key">Market data</td><td>yfinance, feedparser</td></tr>
+    <tr><td class="key">LLM providers</td><td>google-generativeai, openai, anthropic</td></tr>
+    <tr><td class="key">Frontend</td><td>Vite, TypeScript</td></tr>
+  </table>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">13</span><h2>Known Limitations</h2></div>
+  <div class="note">
+    <ul style="margin-bottom:0;">
+      <li><strong>Single data vendor, no redundancy</strong> — yfinance only, with a last-known-cache fallback but no secondary provider or failover.</li>
+      <li><strong>Three of five agents depend on external LLM APIs</strong> (Gemini, OpenAI, Anthropic) — introduces per-cycle latency, cost, and third-party availability risk into the decision path.</li>
+      <li><strong>No automated stop-loss / max-drawdown kill-switch</strong> — risk controls are volatility-based sizing/rejection plus a forced end-of-day square-off; there is no independent circuit breaker on cumulative losses.</li>
+      <li><strong>No live-vs-backtest divergence tracking</strong> beyond the vectorbt SMA baseline comparison — no formal live/replay parity monitoring yet.</li>
+      <li><strong>Per-symbol cost attribution is diagnostic only</strong> — shared cash across symbols makes fully rigorous per-symbol P&amp;L attribution nontrivial (<code class="inline">audit/report.py::cost_breakdown_by_symbol</code>).</li>
+    </ul>
+  </div>
+</section>
+
+<footer class="page-footer">
+  <span>Investment Committee — Technical Architecture Report</span>
+  <span>Prepared 8 July 2026</span>
+</footer>
