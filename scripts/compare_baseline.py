@@ -9,12 +9,18 @@ across symbols, which is a bigger, separately-worth-doing piece of work.
 A per-symbol comparison is still a fair, honest apples-to-apples test: same
 price series, same cash, same cost assumptions, same metric formulas.
 
+Runs one symbol per worker process — each symbol's replay is fully
+independent (its own in-memory DB/portfolio), so this is a free ~Nx speedup
+on an N-core machine with no change to any of the numbers.
+
 Usage:
     python scripts/compare_baseline.py
 """
 
 import asyncio
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
@@ -68,36 +74,48 @@ def run_baseline_equity_curve(symbol: str) -> pd.Series:
     return portfolio.value()[symbol]
 
 
-def compare_symbol(symbol: str) -> pd.DataFrame | None:
-    print(f"\n=== {symbol} ===")
+def compare_symbol(symbol: str) -> tuple[str, pd.DataFrame | None, str | None]:
+    """Returns (symbol, comparison_df, error) rather than printing directly —
+    run from a worker process, so printing here would interleave garbled
+    output from multiple symbols on the same terminal.
+    """
     try:
         baseline_values = run_baseline_equity_curve(symbol)
         committee_values = asyncio.run(run_committee_equity_curve(symbol))
     except Exception as exc:
-        print(f"  skipped: {exc}")
-        return None
+        return symbol, None, str(exc)
 
     baseline_stats = compute_returns_stats(baseline_values)
     committee_stats = compute_returns_stats(committee_values)
     comparison = pd.DataFrame({"Baseline (SMA crossover)": baseline_stats, "Committee": committee_stats})
-    print(comparison.to_string())
-    return comparison
+    return symbol, comparison, None
 
 
 def main() -> None:
-    all_comparisons = []
-    for symbol in WATCHLIST:
-        comparison = compare_symbol(symbol)
-        if comparison is not None:
-            all_comparisons.append(comparison)
+    results: dict[str, pd.DataFrame] = {}
+    max_workers = min(len(WATCHLIST), os.cpu_count() or 4)
 
-    if not all_comparisons:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(compare_symbol, symbol): symbol for symbol in WATCHLIST}
+        for future in as_completed(futures):
+            symbol, comparison, error = future.result()
+            if error is not None:
+                print(f"\n=== {symbol} ===\n  skipped: {error}")
+            else:
+                results[symbol] = comparison
+
+    # Print in watchlist order (not completion order) for a stable report.
+    for symbol in WATCHLIST:
+        if symbol in results:
+            print(f"\n=== {symbol} ===")
+            print(results[symbol].to_string())
+
+    if not results:
         print("\nNo symbols produced a valid comparison.")
         return
 
-    numeric_rows = [c for c in all_comparisons]
-    average = sum(c.apply(pd.to_numeric, errors="coerce") for c in numeric_rows) / len(numeric_rows)
-    print(f"\n=== Average across {len(numeric_rows)} symbols ===")
+    average = sum(c.apply(pd.to_numeric, errors="coerce") for c in results.values()) / len(results)
+    print(f"\n=== Average across {len(results)} symbols ===")
     print(average.to_string())
 
 
