@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     gemini_api_key: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
     newsapi_key: str = ""
     database_url: str = "sqlite:///./data/committee.db"
 
@@ -90,6 +92,22 @@ SLIPPAGE_PCT_RANGE = (0.0002, 0.0005)
 # --- Session timing (IST) ---------------------------------------------------
 SESSION_START = "09:15"
 SESSION_SQUARE_OFF = "15:15"
+
+# --- LLM provider diversity ---------------------------------------------------
+# Different providers for different agents on purpose: an LLM agent's
+# reasoning is shaped by its training, not just its prompt, so routing each
+# LLM-backed agent through a different lab's model gives the Debate Layer
+# genuinely independent points of view instead of one model role-playing
+# three personas. Contrarian (the devil's-advocate role) gets the provider
+# most likely to disagree for reasons the others wouldn't.
+AGENT_PROVIDER_MAP = {
+    "News & Sentiment": "gemini",
+    "Macro": "openai",
+    "Contrarian": "anthropic",
+}
+GEMINI_MODEL_NAME = "gemini-1.5-flash"
+OPENAI_MODEL_NAME = "gpt-5-mini"
+ANTHROPIC_MODEL_NAME = "claude-haiku-4-5"
 
 # --- Forecasting Agent (LightGBM, not an LLM call) --------------------------
 # A genuinely different point of view from the LLM agents: pattern-matching on

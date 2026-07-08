@@ -49,6 +49,12 @@ def run_sma_crossover_baseline(
     slow_ma = vbt.MA.run(price_panel, window=slow_window)
     entries = fast_ma.ma_crossed_above(slow_ma)
     exits = fast_ma.ma_crossed_below(slow_ma)
+    # vbt.MA.run() labels columns with a (window, ..., symbol) MultiIndex to
+    # support parameter sweeps; with a single fixed window per side, that
+    # collapses back to one column per input symbol in the same order —
+    # relabel so callers can index by plain symbol name.
+    entries.columns = price_panel.columns
+    exits.columns = price_panel.columns
 
     return vbt.Portfolio.from_signals(
         price_panel,
