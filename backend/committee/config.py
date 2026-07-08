@@ -147,7 +147,7 @@ AGENT_PROVIDER_MAP = {
     "Macro": "openai",
     "Contrarian": "anthropic",
 }
-GEMINI_MODEL_NAME = "gemini-1.5-flash"
+GEMINI_MODEL_NAME = "gemini-2.5-flash"
 OPENAI_MODEL_NAME = "gpt-5-mini"
 ANTHROPIC_MODEL_NAME = "claude-haiku-4-5"
 
