@@ -1,0 +1,433 @@
+<title>Investment Committee — Business Briefing</title>
+<style>
+  :root {
+    --paper: #FAFAF8;
+    --paper-panel: #F1F1EC;
+    --ink: #1B2430;
+    --ink-soft: #4A5568;
+    --ink-faint: #7A8494;
+    --rule: #D8DCE1;
+    --accent: #0F5D4E;
+    --accent-soft: #E4EFEC;
+    --amber: #9A6324;
+    --amber-soft: #F4ECDD;
+  }
+
+  * { box-sizing: border-box; }
+
+  @page {
+    size: A4;
+    margin: 22mm 20mm 20mm 20mm;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Segoe UI", "Segoe UI Semibold", -apple-system, sans-serif;
+    font-size: 10.6pt;
+    line-height: 1.55;
+  }
+
+  h1, h2, h3 {
+    font-family: Cambria, "Iowan Old Style", Georgia, serif;
+    font-weight: 600;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  .num, table td.figure, .badge, .kicker {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Cover page ---------- */
+  .cover {
+    height: 245mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    page-break-after: always;
+  }
+
+  .cover-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 8.5pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 10mm;
+  }
+
+  .cover-mid {
+    padding: 14mm 0;
+  }
+
+  .cover-kicker {
+    font-size: 9.5pt;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 8mm;
+  }
+
+  .cover h1 {
+    font-size: 34pt;
+    line-height: 1.12;
+    margin: 0 0 6mm 0;
+    max-width: 15ch;
+  }
+
+  .cover-sub {
+    font-size: 13pt;
+    color: var(--ink-soft);
+    max-width: 42ch;
+    margin: 0 0 12mm 0;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3mm;
+    background: var(--amber-soft);
+    border: 1px solid #E0CDA8;
+    color: var(--amber);
+    padding: 3mm 5mm;
+    font-size: 9.5pt;
+    font-weight: 600;
+    border-radius: 2px;
+  }
+
+  .status-dot {
+    width: 2.2mm;
+    height: 2.2mm;
+    border-radius: 50%;
+    background: var(--amber);
+    display: inline-block;
+  }
+
+  .cover-bottom {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10mm;
+    border-top: 1px solid var(--rule);
+    padding-top: 8mm;
+  }
+
+  .cover-bottom .label {
+    font-size: 8pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 2mm;
+  }
+
+  .cover-bottom .value {
+    font-size: 10.5pt;
+    color: var(--ink);
+  }
+
+  /* ---------- Body ---------- */
+  .page { page-break-inside: avoid; }
+
+  section { margin-bottom: 9mm; }
+  section.avoid-break { page-break-inside: avoid; }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 4mm;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: 2mm;
+    margin-bottom: 4.5mm;
+  }
+
+  .section-num {
+    font-family: Cambria, Georgia, serif;
+    font-size: 9pt;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .section-head h2 {
+    font-size: 15pt;
+    margin: 0;
+  }
+
+  p { margin: 0 0 3mm 0; color: var(--ink); max-width: 68ch; }
+  .lede { font-size: 11.5pt; color: var(--ink-soft); max-width: 66ch; }
+
+  ul, ol { margin: 0 0 3mm 0; padding-left: 5mm; max-width: 66ch; }
+  li { margin-bottom: 1.5mm; }
+
+  strong { color: var(--ink); font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 3mm 0 5mm 0;
+    font-size: 9.8pt;
+  }
+
+  th {
+    text-align: left;
+    font-size: 8pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    padding: 2mm 3mm;
+    border-bottom: 1px solid var(--ink);
+  }
+
+  td {
+    padding: 2.2mm 3mm;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink-soft);
+  }
+
+  tr:last-child td { border-bottom: 1.5px solid var(--ink); }
+
+  td.figure { color: var(--ink); font-weight: 600; }
+
+  .callout {
+    background: var(--paper-panel);
+    border-left: 3px solid var(--accent);
+    padding: 4mm 5mm;
+    margin: 3mm 0;
+    font-size: 9.8pt;
+  }
+
+  .callout.warn {
+    background: var(--amber-soft);
+    border-left-color: var(--amber);
+  }
+
+  .callout h3 {
+    font-size: 10pt;
+    margin: 0 0 2mm 0;
+    font-family: "Segoe UI", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .callout p:last-child { margin-bottom: 0; }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
+    margin: 3mm 0 5mm 0;
+  }
+
+  .card {
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 4mm 5mm;
+  }
+
+  .card .card-label {
+    font-size: 8pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 1.5mm;
+  }
+
+  .card p { margin: 0; font-size: 9.6pt; color: var(--ink-soft); }
+
+  .flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2mm;
+    margin: 4mm 0 5mm 0;
+  }
+
+  .flow-step {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid #C9DED9;
+    padding: 2.5mm 4mm;
+    font-size: 8.8pt;
+    font-weight: 600;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+
+  .flow-arrow { color: var(--ink-faint); font-size: 10pt; }
+
+  .qa dt {
+    font-weight: 600;
+    color: var(--ink);
+    margin-top: 3.5mm;
+    font-size: 10pt;
+  }
+
+  .qa dd {
+    margin: 1mm 0 0 0;
+    color: var(--ink-soft);
+    max-width: 62ch;
+  }
+
+  footer.page-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 7.5pt;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--rule);
+    padding-top: 2mm;
+    margin-top: 10mm;
+  }
+
+  .pagebreak { page-break-before: always; }
+</style>
+
+<div class="cover">
+  <div class="cover-top">
+    <span>Investment Committee — Internal Briefing</span>
+    <span>Prepared for CFO Review</span>
+  </div>
+  <div class="cover-mid">
+    <div class="cover-kicker">Business &amp; Functional Overview</div>
+    <h1>Investment Committee</h1>
+    <p class="cover-sub">An AI-assisted equity trading system for NSE large-caps — how it decides, when it acts, and what it costs.</p>
+    <div class="status-badge"><span class="status-dot"></span> Status: Simulated / Paper-Trading — Pre-Production</div>
+  </div>
+  <div class="cover-bottom">
+    <div>
+      <div class="label">Document</div>
+      <div class="value">Business Briefing</div>
+    </div>
+    <div>
+      <div class="label">Date</div>
+      <div class="value">8 July 2026</div>
+    </div>
+    <div>
+      <div class="label">Companion Document</div>
+      <div class="value">Technical Architecture Report</div>
+    </div>
+  </div>
+</div>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">1</span><h2>Executive Summary</h2></div>
+  <p class="lede">Investment Committee is a simulated trading system that watches ten large, liquid Indian stocks and makes buy / sell / wait decisions the way a research desk might — by putting five different analytical perspectives in a room, having them argue, and only acting when the room reaches real conviction.</p>
+  <p>Today it runs on virtual capital, not real money. Every price it sees, every decision it makes, and every rupee it would have made or lost is logged and visible on a live dashboard, in full, decision by decision — which is what makes it useful to evaluate now, before any capital is put behind it. This briefing covers what it trades, why it decides what it decides, when it acts, where its information comes from, and what stands between here and a live deployment.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">2</span><h2>What Stocks Does It Trade?</h2></div>
+  <p>The system currently follows a fixed list of ten NSE large-caps — chosen for liquidity, not by any dynamic screening process. It does not scan the broader market or add/drop names on its own.</p>
+  <table>
+    <tr><th>Symbol</th><th>Company</th><th>Symbol</th><th>Company</th></tr>
+    <tr><td class="figure">RELIANCE</td><td>Reliance Industries</td><td class="figure">SBIN</td><td>State Bank of India</td></tr>
+    <tr><td class="figure">TCS</td><td>Tata Consultancy Services</td><td class="figure">TATAMOTORS</td><td>Tata Motors</td></tr>
+    <tr><td class="figure">HDFCBANK</td><td>HDFC Bank</td><td class="figure">ITC</td><td>ITC Limited</td></tr>
+    <tr><td class="figure">INFY</td><td>Infosys</td><td class="figure">LT</td><td>Larsen &amp; Toubro</td></tr>
+    <tr><td class="figure">ICICIBANK</td><td>ICICI Bank</td><td class="figure">ADANIENT</td><td>Adani Enterprises</td></tr>
+  </table>
+  <p style="font-size:9.3pt;color:var(--ink-faint);">Expanding this list to more names, or to a rules-based screener, is a configuration change, not a rebuild.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">3</span><h2>What Triggers a Trade Decision?</h2></div>
+  <p>Every decision comes from five specialists who each independently form a view on a stock, then are made to challenge one another before a single call is issued:</p>
+  <div class="card-grid">
+    <div class="card"><div class="card-label">Technical</div><p>Reads price charts and momentum — the kind of view a chartist would form from candles and moving averages.</p></div>
+    <div class="card"><div class="card-label">News &amp; Sentiment</div><p>Reads recent headlines about the company and the market's tone toward it.</p></div>
+    <div class="card"><div class="card-label">Macro</div><p>Weighs broader conditions — interest rates, policy events, sector-wide moves.</p></div>
+    <div class="card"><div class="card-label">Forecasting</div><p>A statistical model trained on years of price history, predicting the likely near-term direction.</p></div>
+  </div>
+  <p><strong>A fifth voice, the Contrarian, deliberately plays devil's advocate</strong> — it is built to challenge the other four rather than agree with them, and its pushback measurably softens the confidence of any specialist it disagrees with before a final call is made.</p>
+  <p>Each specialist's opinion doesn't count equally. It's weighted by how right that specialist has been recently, and by how relevant its domain is to the moment — for example, the News specialist is given more say on an earnings day, and Macro more say on an RBI policy day. All of this is combined into one overall conviction score. <strong>A trade only happens if that conviction clears a minimum bar; otherwise the system does nothing and waits</strong> — inaction is the default, not the exception.</p>
+  <div class="flow">
+    <span class="flow-step">5 Specialists Vote</span><span class="flow-arrow">→</span>
+    <span class="flow-step">Contrarian Challenges</span><span class="flow-arrow">→</span>
+    <span class="flow-step">Weighted Conviction Score</span><span class="flow-arrow">→</span>
+    <span class="flow-step">Trade, or Wait</span>
+  </div>
+</section>
+
+<div class="pagebreak"></div>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">4</span><h2>When Does It Trade?</h2></div>
+  <p>The system re-evaluates every stock on its list once every five minutes, for the entire NSE trading session — <strong>9:15 AM to 3:15 PM IST</strong>. It does not hold positions overnight: everything is designed to be closed out before the session ends, so the portfolio starts every trading day flat, with no carried risk.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">5</span><h2>Where Does the Data Come From?</h2></div>
+  <p>Prices come from <strong>Yahoo Finance</strong> — a free, widely used market data source, not a paid institutional feed. News comes from public RSS feeds run by Moneycontrol and The Economic Times. Both are adequate for evaluating the system's decision logic today, but neither comes with a service-level guarantee, and that matters before any real capital is involved (see Section 8).</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">6</span><h2>How Is Risk Controlled?</h2></div>
+  <p>Before any trade is placed, a risk check independently sizes and can veto it:</p>
+  <ul>
+    <li><strong>Position limits.</strong> No single stock can take more than 100% of available buying power.</li>
+    <li><strong>Volatility-aware sizing.</strong> When a stock's estimated volatility runs high, the position is automatically cut in half; when it's extreme, the trade is rejected outright, no matter how confident the specialists were.</li>
+    <li><strong>Capital discipline across stocks.</strong> If several stocks want more exposure at once and there isn't enough buying power for all of them, the available capital is split in proportion to conviction rather than handed out first-come-first-served.</li>
+    <li><strong>Forced flat close.</strong> Every position is squared off before the market closes.</li>
+  </ul>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">7</span><h2>How Is Performance Measured?</h2></div>
+  <p>Every trade carries a realistic Indian equity cost load — brokerage, STT, exchange charges, SEBI fees, stamp duty, GST, and an estimate for slippage — deducted before performance is reported. The system tracks two numbers side by side:</p>
+  <table>
+    <tr><th>Metric</th><th>Meaning</th></tr>
+    <tr><td class="figure">Gross P&amp;L</td><td>Profit or loss before trading costs — the "on paper" number.</td></tr>
+    <tr><td class="figure">Net P&amp;L</td><td>What's actually left after every cost above is deducted — the number that matters.</td></tr>
+  </table>
+  <p>Both are visible live, alongside a full trade log, on the dashboard described below.</p>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">8</span><h2>What You'd See in the Dashboard</h2></div>
+  <p>A live web dashboard shows running cash, net and gross P&amp;L, open positions, and every trade executed. Critically, it also shows the reasoning behind every single decision — what each of the five specialists concluded, what the Contrarian challenged, and why the risk layer sized or blocked the trade. Nothing is a black box: any decision can be inspected after the fact and explained in plain terms.</p>
+</section>
+
+<div class="pagebreak"></div>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">9</span><h2>Current Limitations &amp; Path to Live Trading</h2></div>
+  <div class="callout warn">
+    <h3>Honest state of play</h3>
+    <p>This system runs on virtual capital only. It is not connected to a broker and has never placed a real order. The following gaps are what stand between the current build and a live deployment — not defects, but the expected next-stage work for a system at this maturity:</p>
+  </div>
+  <ul>
+    <li><strong>No live broker connection yet.</strong> Trades are simulated end-to-end, including realistic cost modeling, but no order has ever touched a real exchange account.</li>
+    <li><strong>Free-tier market data.</strong> Yahoo Finance has no uptime or latency guarantee; a production deployment would need a licensed, SLA-backed data vendor.</li>
+    <li><strong>Three specialists rely on external AI providers</strong> (Google, OpenAI, Anthropic) for their reasoning. This is deliberate — different providers give genuinely independent points of view rather than one model role-playing three personas — but it does mean the system's uptime is partly tied to three outside vendors' availability.</li>
+    <li><strong>No standalone stop-loss or max-drawdown circuit breaker</strong> beyond the volatility-based sizing and the forced end-of-day close described in Section 6. This would be a natural next control to add before live capital is committed.</li>
+  </ul>
+</section>
+
+<section class="avoid-break">
+  <div class="section-head"><span class="section-num">10</span><h2>Anticipated Questions</h2></div>
+  <dl class="qa">
+    <dt>Is this trading with real money right now?</dt>
+    <dd>No. It trades against a virtual ₹10,000 account with 2x leverage. No live brokerage account is connected.</dd>
+    <dt>If this went live, how much could we lose?</dt>
+    <dd>Exposure is capped per stock and trimmed automatically as estimated volatility rises, with all positions closed by end of day — but there is no independent stop-loss or drawdown kill-switch today, which is the main control gap to close before live capital.</dd>
+    <dt>Who's accountable if the AI gets it wrong?</dt>
+    <dd>Every decision — including which specialist argued for what, and why — is logged and reviewable. Nothing acts without leaving a full, human-readable explanation behind.</dd>
+    <dt>Can we add more stocks, or other asset classes?</dt>
+    <dd>Yes — the watchlist is a configuration list, not something wired into the logic. Adding names is straightforward; new asset classes would need more evaluation.</dd>
+    <dt>What happens if the data feed goes down?</dt>
+    <dd>The system falls back to the last cached prices rather than failing outright, but a dropped free-tier feed is exactly the kind of risk a licensed data vendor would remove before going live.</dd>
+    <dt>How often does it re-decide?</dt>
+    <dd>Every five minutes, for every stock on the list, throughout the trading session.</dd>
+  </dl>
+</section>
+
+<footer class="page-footer">
+  <span>Investment Committee — Business Briefing</span>
+  <span>Prepared 8 July 2026</span>
+</footer>

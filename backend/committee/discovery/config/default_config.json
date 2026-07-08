@@ -1,0 +1,49 @@
+{
+  "data": {
+    "period": "60d",
+    "interval": "5m",
+    "min_bars": 60,
+    "correlation_lookback_bars": 60,
+    "fetchable_only": true
+  },
+  "scanner": {
+    "min_last_price": 5.0,
+    "min_median_turnover": 2000000.0,
+    "min_bars": 60,
+    "regime_risk_on_breadth": 0.60,
+    "regime_risk_off_breadth": 0.40,
+    "regime_high_vol_atr_pct": 0.035
+  },
+  "scoring": {
+    "winsor_method": "tanh",
+    "decorrelate": true,
+    "weights": {
+      "liquidity": 0.6,
+      "trend_quality": 1.0,
+      "relative_strength": 1.0,
+      "momentum": 1.1,
+      "mean_reversion": 0.7,
+      "breakout": 0.8,
+      "volume_expansion": 0.9,
+      "volatility_opportunity": 0.8,
+      "sector_strength": 0.5,
+      "event": 0.9,
+      "risk_penalty": 1.0
+    },
+    "magnitude_factors": ["momentum", "relative_strength", "mean_reversion", "breakout"],
+    "event_rel_volume": 2.0,
+    "event_gap_atr_mult": 1.5,
+    "event_vol_expansion": 1.5
+  },
+  "diversity": {
+    "target_min": 50,
+    "target_max": 60,
+    "max_per_sector_fraction": 0.30,
+    "correlation_threshold": 0.80,
+    "max_per_correlation_cluster": 3,
+    "similarity_penalty": 0.25,
+    "capacity_weight": 0.20,
+    "use_shrinkage": true,
+    "prescreen_top_n": 150
+  }
+}

@@ -1,0 +1,1171 @@
+{
+  "description": "Broad NSE discovery universe (editable data asset). 'stock_code' is the Breeze stock_code; add verified codes to make a symbol live-fetchable (see config.BREEZE_STOCK_CODE_MAP).",
+  "count": 233,
+  "symbols": [
+    {
+      "symbol": "HDFCBANK",
+      "sector": "Financial Services",
+      "stock_code": "HDFBAN"
+    },
+    {
+      "symbol": "ICICIBANK",
+      "sector": "Financial Services",
+      "stock_code": "ICIBAN"
+    },
+    {
+      "symbol": "SBIN",
+      "sector": "Financial Services",
+      "stock_code": "STABAN"
+    },
+    {
+      "symbol": "KOTAKBANK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "AXISBANK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "BAJFINANCE",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "BAJAJFINSV",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "INDUSINDBK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "SBILIFE",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "HDFCLIFE",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "ICICIPRULI",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "ICICIGI",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "BANKBARODA",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "PNB",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "CANBK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "UNIONBANK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "IDFCFIRSTB",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "FEDERALBNK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "BANDHANBNK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "AUBANK",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "CHOLAFIN",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "SBICARD",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "MUTHOOTFIN",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "MANAPPURAM",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "LICHSGFIN",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "PFC",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "RECLTD",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "IRFC",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "HDFCAMC",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "MFSL",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "MAXHEALTH",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "LTF",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "PNBHOUSING",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "CANFINHOME",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "BAJAJHLDNG",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "SHRIRAMFIN",
+      "sector": "Financial Services",
+      "stock_code": null
+    },
+    {
+      "symbol": "TCS",
+      "sector": "Information Technology",
+      "stock_code": "TCS"
+    },
+    {
+      "symbol": "INFY",
+      "sector": "Information Technology",
+      "stock_code": "INFTEC"
+    },
+    {
+      "symbol": "HCLTECH",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "WIPRO",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "TECHM",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "LTIM",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "PERSISTENT",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "COFORGE",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "MPHASIS",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "LTTS",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "BSOFT",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "CYIENT",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "KPITTECH",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "ZENSARTECH",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "TATAELXSI",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "OFSS",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "INTELLECT",
+      "sector": "Information Technology",
+      "stock_code": null
+    },
+    {
+      "symbol": "MARUTI",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "TATAMOTORS",
+      "sector": "Automobile",
+      "stock_code": "TATMOT"
+    },
+    {
+      "symbol": "M&M",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "BAJAJ-AUTO",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "HEROMOTOCO",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "EICHERMOT",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "TVSMOTOR",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "ASHOKLEY",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "BHARATFORG",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "MOTHERSON",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "BOSCHLTD",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "EXIDEIND",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "BALKRISIND",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "MRF",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "APOLLOTYRE",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "SONACOMS",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "UNOMINDA",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "ENDURANCE",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "SCHAEFFLER",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "TIINDIA",
+      "sector": "Automobile",
+      "stock_code": null
+    },
+    {
+      "symbol": "SUNPHARMA",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "CIPLA",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "DRREDDY",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "DIVISLAB",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "APOLLOHOSP",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "TORNTPHARM",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "LUPIN",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "AUROPHARMA",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "BIOCON",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "ALKEM",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "ZYDUSLIFE",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "GLENMARK",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "IPCALAB",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "AJANTPHARM",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "NATCOPHARM",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "ABBOTINDIA",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "LAURUSLABS",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "GRANULES",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "FORTIS",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "LALPATHLAB",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "METROPOLIS",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "SYNGENE",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "GLAND",
+      "sector": "Pharma & Healthcare",
+      "stock_code": null
+    },
+    {
+      "symbol": "RELIANCE",
+      "sector": "Energy & Oil Gas",
+      "stock_code": "RELIND"
+    },
+    {
+      "symbol": "ONGC",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "BPCL",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "IOC",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "GAIL",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "PETRONET",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "IGL",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "MGL",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "GUJGASLTD",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "OIL",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "HINDPETRO",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "ATGL",
+      "sector": "Energy & Oil Gas",
+      "stock_code": null
+    },
+    {
+      "symbol": "HINDUNILVR",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "ITC",
+      "sector": "FMCG",
+      "stock_code": "ITC"
+    },
+    {
+      "symbol": "NESTLEIND",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "BRITANNIA",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "TATACONSUM",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "GODREJCP",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "DABUR",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "MARICO",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "COLPAL",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "UBL",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "VBL",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "RADICO",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "EMAMILTD",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "JYOTHYLAB",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "PGHH",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "GILLETTE",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "PATANJALI",
+      "sector": "FMCG",
+      "stock_code": null
+    },
+    {
+      "symbol": "TATASTEEL",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "JSWSTEEL",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "HINDALCO",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "VEDL",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "COALINDIA",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "NMDC",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "SAIL",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "JINDALSTEL",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "NATIONALUM",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "HINDZINC",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "APLAPOLLO",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "RATNAMANI",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "WELCORP",
+      "sector": "Metals & Mining",
+      "stock_code": null
+    },
+    {
+      "symbol": "ULTRACEMCO",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "GRASIM",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "SHREECEM",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "AMBUJACEM",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "ACC",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "LT",
+      "sector": "Cement & Construction",
+      "stock_code": "LARTOU"
+    },
+    {
+      "symbol": "RAMCOCEM",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "JKCEMENT",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "DALBHARAT",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "NBCC",
+      "sector": "Cement & Construction",
+      "stock_code": null
+    },
+    {
+      "symbol": "SIEMENS",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "BEL",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "HAL",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "ABB",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "CUMMINSIND",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "THERMAX",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "BHEL",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "POLYCAB",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "KEI",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "HAVELLS",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "GMRINFRA",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "IRB",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "RVNL",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "IRCON",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "NCC",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "BDL",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "MAZDOCK",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "COCHINSHIP",
+      "sector": "Capital Goods & Infra",
+      "stock_code": null
+    },
+    {
+      "symbol": "PIDILITIND",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "SRF",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "PIIND",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "DEEPAKNTR",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "AARTIIND",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "ATUL",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "NAVINFLUOR",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "VINATIORGA",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "TATACHEM",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "COROMANDEL",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "GNFC",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "UPL",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "FINEORG",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "CLEAN",
+      "sector": "Chemicals",
+      "stock_code": null
+    },
+    {
+      "symbol": "TITAN",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "VOLTAS",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "BLUESTARCO",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "WHIRLPOOL",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "DIXON",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "AMBER",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "VGUARD",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "CROMPTON",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "BERGEPAINT",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "ASIANPAINT",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "KAJARIACER",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "BATAINDIA",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "RELAXO",
+      "sector": "Consumer Durables",
+      "stock_code": null
+    },
+    {
+      "symbol": "DLF",
+      "sector": "Realty",
+      "stock_code": null
+    },
+    {
+      "symbol": "GODREJPROP",
+      "sector": "Realty",
+      "stock_code": null
+    },
+    {
+      "symbol": "OBEROIRLTY",
+      "sector": "Realty",
+      "stock_code": null
+    },
+    {
+      "symbol": "PRESTIGE",
+      "sector": "Realty",
+      "stock_code": null
+    },
+    {
+      "symbol": "PHOENIXLTD",
+      "sector": "Realty",
+      "stock_code": null
+    },
+    {
+      "symbol": "BRIGADE",
+      "sector": "Realty",
+      "stock_code": null
+    },
+    {
+      "symbol": "SOBHA",
+      "sector": "Realty",
+      "stock_code": null
+    },
+    {
+      "symbol": "BHARTIARTL",
+      "sector": "Telecom",
+      "stock_code": null
+    },
+    {
+      "symbol": "TATACOMM",
+      "sector": "Telecom",
+      "stock_code": null
+    },
+    {
+      "symbol": "HFCL",
+      "sector": "Telecom",
+      "stock_code": null
+    },
+    {
+      "symbol": "STLTECH",
+      "sector": "Telecom",
+      "stock_code": null
+    },
+    {
+      "symbol": "INDUSTOWER",
+      "sector": "Telecom",
+      "stock_code": null
+    },
+    {
+      "symbol": "IDEA",
+      "sector": "Telecom",
+      "stock_code": null
+    },
+    {
+      "symbol": "NTPC",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "POWERGRID",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "TATAPOWER",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "ADANIPOWER",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "ADANIGREEN",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "ADANIENSOL",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "JSWENERGY",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "NHPC",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "SJVN",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "TORNTPOWER",
+      "sector": "Power & Utilities",
+      "stock_code": null
+    },
+    {
+      "symbol": "ADANIENT",
+      "sector": "Diversified & Others",
+      "stock_code": "ADAENT"
+    },
+    {
+      "symbol": "ADANIPORTS",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "GODREJIND",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "3MINDIA",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "HONAUT",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "IRCTC",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "INDIGO",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "CONCOR",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "DELHIVERY",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "INDHOTEL",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "JUBLFOOD",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "TRENT",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "NAUKRI",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "PAGEIND",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "PVRINOX",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "INDIAMART",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    },
+    {
+      "symbol": "AFFLE",
+      "sector": "Diversified & Others",
+      "stock_code": null
+    }
+  ]
+}
