@@ -18,6 +18,10 @@ dependencies = [
     "httpx>=0.27",
     "google-generativeai>=0.8",
     "python-dotenv>=1.0",
+    "lightgbm>=4.5",
+    "vectorbt>=0.27",
+    "openai>=1.50",
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]
