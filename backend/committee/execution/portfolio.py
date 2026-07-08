@@ -6,14 +6,14 @@ more than what Risk approved."""
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from backend.committee.config import BUYING_POWER
+from backend.committee.config import BUYING_POWER, CAPITAL
 from backend.committee.execution.cost_model import apply_costs
 from backend.committee.schemas import ConsensusDecision, Decision, PortfolioSnapshot, RiskAction, RiskVerdict, TradeRecord
 
 
 @dataclass
 class Portfolio:
-    cash: float = BUYING_POWER
+    cash: float = CAPITAL
     positions: dict[str, float] = field(default_factory=dict)  # symbol -> signed qty
 
     def mark_to_market(self, prices: dict[str, float]) -> PortfolioSnapshot:
@@ -24,7 +24,7 @@ class Portfolio:
             cash=self.cash,
             positions=dict(self.positions),
             portfolio_value=portfolio_value,
-            net_pnl=portfolio_value - BUYING_POWER,
+            net_pnl=portfolio_value - CAPITAL,
         )
 
 

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from backend.committee.config import BUYING_POWER
+from backend.committee.config import CAPITAL
 from backend.committee.persistence import models
 
 
@@ -36,7 +36,7 @@ class PnLSummary:
         )
 
 
-def summarize_pnl(session: Session, portfolio_value: float, starting_capital: float = BUYING_POWER) -> PnLSummary:
+def summarize_pnl(session: Session, portfolio_value: float, starting_capital: float = CAPITAL) -> PnLSummary:
     trades = session.query(models.Decision).filter(models.Decision.qty > 0).all()
     total_costs = sum((trade.cost_breakdown or {}).get("total_cost", 0.0) for trade in trades)
 

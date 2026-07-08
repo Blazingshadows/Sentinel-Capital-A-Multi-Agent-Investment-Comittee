@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
-from backend.committee.config import BUYING_POWER
+from backend.committee.config import BUYING_POWER, CAPITAL
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.orchestration.cycle import run_cycle
 from backend.committee.orchestration.loop import run_watchlist_once
@@ -156,7 +156,7 @@ def report(request: Request) -> dict:
     session = request.app.state.session_factory()
     try:
         curve = repository.get_portfolio_curve(session)
-        portfolio_value = curve[-1].portfolio_value if curve else BUYING_POWER
+        portfolio_value = curve[-1].portfolio_value if curve else CAPITAL
         summary = summarize_pnl(session, portfolio_value)
         return {
             "trade_count": summary.trade_count,

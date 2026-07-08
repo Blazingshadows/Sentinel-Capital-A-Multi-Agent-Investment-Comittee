@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
-from backend.committee.config import BUYING_POWER
+from backend.committee.config import CAPITAL, BUYING_POWER
 from backend.committee.persistence import models
 
 
@@ -32,7 +32,7 @@ def _insert_decision(session, stock: str, qty: float, price: float, action_taken
 
 
 def test_summarize_pnl_with_no_trades(db_session):
-    summary = summarize_pnl(db_session, portfolio_value=BUYING_POWER)
+    summary = summarize_pnl(db_session, portfolio_value=CAPITAL)
 
     assert summary.trade_count == 0
     assert summary.gross_pnl == 0.0
@@ -45,14 +45,14 @@ def test_summarize_pnl_computes_gross_as_net_plus_costs(db_session):
     _insert_decision(db_session, "INFY", qty=10, price=1500.0, action_taken="BUY", total_cost=15.0)
     _insert_decision(db_session, "TCS", qty=5, price=3000.0, action_taken="SELL", total_cost=20.0)
 
-    ending_value = BUYING_POWER + 500.0  # e.g. portfolio grew by 500 net of costs
+    ending_value = CAPITAL + 500.0  # e.g. portfolio grew by 500 net of costs
     summary = summarize_pnl(db_session, portfolio_value=ending_value)
 
     assert summary.trade_count == 2
     assert summary.net_pnl == 500.0
     assert summary.total_costs == 35.0
     assert summary.gross_pnl == 535.0  # net + costs
-    assert summary.growth_pct == (500.0 / BUYING_POWER) * 100
+    assert summary.growth_pct == (500.0 / CAPITAL) * 100
 
 
 def test_cost_breakdown_by_symbol_aggregates_per_stock(db_session):
