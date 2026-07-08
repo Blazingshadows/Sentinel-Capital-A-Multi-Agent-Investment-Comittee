@@ -29,28 +29,40 @@ class Portfolio:
 
 
 def execute(portfolio: Portfolio, consensus: ConsensusDecision, risk_verdict: RiskVerdict, price: float) -> TradeRecord:
-    if (
-        consensus.decision == Decision.WAIT
-        or risk_verdict.action == RiskAction.REJECT
-        or risk_verdict.approved_allocation <= 0
-    ):
+    """`risk_verdict.approved_allocation` is a *target* position size (as a
+    fraction of buying power), not an amount to add on top of whatever's
+    already held — trading the full notional every cycle a signal persists
+    would let exposure snowball far past the position-limit cap over many
+    cycles even though each individual cycle respected it. Only the delta
+    between the current position and the target gets traded; a signal that's
+    already fully expressed in the current position correctly results in no
+    trade at all.
+    """
+    current_qty = portfolio.positions.get(consensus.symbol, 0.0)
+
+    if consensus.decision == Decision.WAIT or risk_verdict.action == RiskAction.REJECT or risk_verdict.approved_allocation <= 0:
+        target_qty = current_qty  # WAIT/REJECT means hold whatever's already there, not liquidate it
+    else:
+        direction = 1 if consensus.decision == Decision.BUY else -1
+        target_notional = direction * risk_verdict.approved_allocation * BUYING_POWER
+        target_qty = round(target_notional / price)
+
+    delta_qty = target_qty - current_qty
+    if delta_qty == 0:
         return TradeRecord(symbol=consensus.symbol, action=Decision.WAIT, qty=0.0, price=price)
 
-    notional = risk_verdict.approved_allocation * BUYING_POWER
-    qty = round(notional / price)
-    if qty <= 0:
-        return TradeRecord(symbol=consensus.symbol, action=Decision.WAIT, qty=0.0, price=price)
+    trade_action = Decision.BUY if delta_qty > 0 else Decision.SELL
+    trade_qty = abs(delta_qty)
 
-    net_cash_flow, cost_breakdown = apply_costs(consensus.decision, qty, price)
+    net_cash_flow, cost_breakdown = apply_costs(trade_action, trade_qty, price)
 
     portfolio.cash += net_cash_flow
-    signed_qty = qty if consensus.decision == Decision.BUY else -qty
-    portfolio.positions[consensus.symbol] = portfolio.positions.get(consensus.symbol, 0.0) + signed_qty
+    portfolio.positions[consensus.symbol] = current_qty + delta_qty
 
     return TradeRecord(
         symbol=consensus.symbol,
-        action=consensus.decision,
-        qty=qty,
+        action=trade_action,
+        qty=trade_qty,
         price=price,
         cost_breakdown=cost_breakdown,
         net_cash_flow=net_cash_flow,

@@ -1,19 +1,25 @@
-"""Orchestration loop: runs one committee cycle per watchlist stock, then
-takes a single portfolio mark-to-market snapshot for the whole pass (a
-shared `Portfolio` can hold positions across many stocks, so it only makes
-sense to snapshot once all of them have a fresh price for this pass).
+"""Orchestration loop: evaluates every watchlist stock first (agents through
+Risk, no capital committed), runs the results through the cross-symbol
+capital allocator, then executes -- a single symbol's risk verdict has no
+visibility into what capital other watchlist symbols want the same cycle,
+so trades can't be executed until all of them are known. Takes a single
+portfolio mark-to-market snapshot for the whole pass (a shared `Portfolio`
+can hold positions across many stocks, so it only makes sense to snapshot
+once all of them have a fresh price for this pass).
 """
 
 import asyncio
 import logging
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from backend.committee.config import SESSION_SQUARE_OFF, SESSION_START, WATCHLIST
 from backend.committee.execution.portfolio import Portfolio
-from backend.committee.orchestration.cycle import run_cycle
+from backend.committee.market_data.context import build_context
+from backend.committee.orchestration.allocator import AllocationCandidate, allocate_capital
+from backend.committee.orchestration.cycle import evaluate_context, finalize_cycle
 from backend.committee.persistence import repository
 from backend.committee.schemas import DecisionLog
 
@@ -31,17 +37,36 @@ def is_market_hours(now: datetime | None = None) -> bool:
 
 def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
                         context_flags: list[str] | None = None) -> list[DecisionLog]:
-    logs: list[DecisionLog] = []
-    latest_prices: dict[str, float] = {}
+    cycle_ts = datetime.now(timezone.utc)
+    evaluations = []
 
     for symbol in watchlist:
         try:
-            log, price = run_cycle(session, portfolio, symbol, context_flags)
-            logs.append(log)
-            latest_prices[symbol] = price
+            context = build_context(symbol, context_flags=context_flags)
+            consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts)
+            evaluations.append((context, consensus, risk_verdict, revised_recommendations))
         except Exception:
-            logger.exception("Cycle failed for %s — skipping this stock this pass.", symbol)
+            logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
             continue
+
+    candidates = [
+        AllocationCandidate(symbol=context.symbol, price=context.latest_price, consensus=consensus, risk_verdict=risk_verdict)
+        for context, consensus, risk_verdict, _ in evaluations
+    ]
+    adjusted_verdicts = allocate_capital(candidates, portfolio)
+
+    logs: list[DecisionLog] = []
+    latest_prices: dict[str, float] = {}
+
+    for context, consensus, risk_verdict, revised_recommendations in evaluations:
+        final_verdict = adjusted_verdicts.get(context.symbol, risk_verdict)
+        try:
+            log = finalize_cycle(session, portfolio, context, consensus, final_verdict, revised_recommendations, cycle_ts)
+        except Exception:
+            logger.exception("Execution failed for %s — skipping this stock this pass.", context.symbol)
+            continue
+        logs.append(log)
+        latest_prices[context.symbol] = context.latest_price
 
     if latest_prices:
         snapshot = portfolio.mark_to_market(latest_prices)

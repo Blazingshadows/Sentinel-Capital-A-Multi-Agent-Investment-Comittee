@@ -8,7 +8,10 @@ consume.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 
+from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
+from backend.committee.config import BUYING_POWER
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.orchestration.cycle import run_cycle
 from backend.committee.orchestration.loop import run_watchlist_once
@@ -26,6 +29,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Autonomous Multi-Agent Investment Committee", lifespan=lifespan)
+
+# Dashboard runs on the Vite dev server (a different origin/port) during
+# development; loosest-that's-still-scoped since this never leaves localhost.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _decision_to_dict(row) -> dict:
@@ -133,5 +145,26 @@ def portfolio_curve(request: Request) -> list[dict]:
     session = request.app.state.session_factory()
     try:
         return [_snapshot_to_dict(row) for row in repository.get_portfolio_curve(session)]
+    finally:
+        session.close()
+
+
+@app.get("/report")
+def report(request: Request) -> dict:
+    """Gross/costs/net P&L summary (Audit Layer) — the PS requires reporting
+    net profit after all trading costs, not gross."""
+    session = request.app.state.session_factory()
+    try:
+        curve = repository.get_portfolio_curve(session)
+        portfolio_value = curve[-1].portfolio_value if curve else BUYING_POWER
+        summary = summarize_pnl(session, portfolio_value)
+        return {
+            "trade_count": summary.trade_count,
+            "gross_pnl": summary.gross_pnl,
+            "total_costs": summary.total_costs,
+            "net_pnl": summary.net_pnl,
+            "growth_pct": summary.growth_pct,
+            "cost_breakdown_by_symbol": cost_breakdown_by_symbol(session),
+        }
     finally:
         session.close()

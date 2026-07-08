@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     gemini_api_key: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
     newsapi_key: str = ""
     database_url: str = "sqlite:///./data/committee.db"
 
@@ -51,14 +53,15 @@ BASE_EXPERTISE = {
     "News & Sentiment": 1.0,
     "Macro": 0.8,
     "Contrarian": 0.6,
+    "Forecasting": 1.0,
 }
 
 # Context multipliers applied to relevance on top of base expertise, keyed by
 # a context flag the orchestration loop sets per cycle (e.g. "earnings_day").
 CONTEXT_RELEVANCE_BOOST = {
-    "earnings_day": {"News & Sentiment": 1.5, "Technical": 1.0, "Macro": 1.0, "Contrarian": 1.0},
-    "rbi_policy_day": {"Macro": 1.8, "Technical": 1.0, "News & Sentiment": 1.0, "Contrarian": 1.0},
-    "normal": {"Technical": 1.0, "News & Sentiment": 1.0, "Macro": 1.0, "Contrarian": 1.0},
+    "earnings_day": {"News & Sentiment": 1.5, "Technical": 1.0, "Macro": 1.0, "Contrarian": 1.0, "Forecasting": 1.0},
+    "rbi_policy_day": {"Macro": 1.8, "Technical": 1.0, "News & Sentiment": 1.0, "Contrarian": 1.0, "Forecasting": 1.0},
+    "normal": {"Technical": 1.0, "News & Sentiment": 1.0, "Macro": 1.0, "Contrarian": 1.0, "Forecasting": 1.0},
 }
 
 # --- Debate Layer ------------------------------------------------------------
@@ -89,3 +92,32 @@ SLIPPAGE_PCT_RANGE = (0.0002, 0.0005)
 # --- Session timing (IST) ---------------------------------------------------
 SESSION_START = "09:15"
 SESSION_SQUARE_OFF = "15:15"
+
+# --- LLM provider diversity ---------------------------------------------------
+# Different providers for different agents on purpose: an LLM agent's
+# reasoning is shaped by its training, not just its prompt, so routing each
+# LLM-backed agent through a different lab's model gives the Debate Layer
+# genuinely independent points of view instead of one model role-playing
+# three personas. Contrarian (the devil's-advocate role) gets the provider
+# most likely to disagree for reasons the others wouldn't.
+AGENT_PROVIDER_MAP = {
+    "News & Sentiment": "gemini",
+    "Macro": "openai",
+    "Contrarian": "anthropic",
+}
+GEMINI_MODEL_NAME = "gemini-1.5-flash"
+OPENAI_MODEL_NAME = "gpt-5-mini"
+ANTHROPIC_MODEL_NAME = "claude-haiku-4-5"
+
+# --- Forecasting Agent (LightGBM, not an LLM call) --------------------------
+# A genuinely different point of view from the LLM agents: pattern-matching on
+# raw price/volume history rather than language-based reasoning over evidence.
+FORECAST_MODEL_PATH = "data/models/forecasting_lgbm.txt"
+FORECAST_META_PATH = "data/models/forecasting_meta.json"
+FORECAST_LAG_PERIODS = [1, 2, 3, 5, 10]
+FORECAST_VOLATILITY_WINDOW = 10
+FORECAST_LOOKAHEAD_BARS = 3  # bars ahead the label/prediction targets
+FORECAST_DEADZONE_RETURN = 0.0015  # |forward return| below this -> neutral label
+FORECAST_TRAIN_PERIOD = "60d"  # yfinance's max lookback at 15m interval
+FORECAST_TRAIN_INTERVAL = "15m"
+FORECAST_MIN_TRAINING_ROWS = 500

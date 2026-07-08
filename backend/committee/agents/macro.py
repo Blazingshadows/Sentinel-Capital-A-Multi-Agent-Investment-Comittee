@@ -1,9 +1,10 @@
 """Macro Analyst Agent — README's third specialist. Focus: sector trends,
-market sentiment, broader economic conditions. LLM-backed (Gemini); degrades
-to a neutral WAIT when the LLM is unavailable.
+market sentiment, broader economic conditions. LLM-backed, routed through
+config.AGENT_PROVIDER_MAP; degrades to a neutral WAIT when the LLM is
+unavailable.
 """
 
-from backend.committee.llm.gemini_client import LLMUnavailableError, complete
+from backend.committee.llm.router import LLMUnavailableError, complete_for_agent
 from backend.committee.market_data.context import MarketContext
 from backend.committee.schemas import AgentOutput, Decision, LLMAgentVerdict
 
@@ -32,7 +33,7 @@ def analyze(context: MarketContext) -> AgentOutput:
     )
 
     try:
-        verdict = complete(SYSTEM_PROMPT, user_prompt, LLMAgentVerdict)
+        verdict = complete_for_agent(AGENT_NAME, SYSTEM_PROMPT, user_prompt, LLMAgentVerdict)
         return verdict.to_agent_output(AGENT_NAME)
     except LLMUnavailableError as exc:
         return AgentOutput(

@@ -1,10 +1,10 @@
 """News & Sentiment Agent — README's second specialist. Focus: financial
-news, earnings updates, corporate announcements. LLM-backed (Gemini);
-degrades to a neutral WAIT rather than crashing the cycle when there's no
-usable headline data or the LLM is unavailable.
+news, earnings updates, corporate announcements. LLM-backed, routed through
+config.AGENT_PROVIDER_MAP; degrades to a neutral WAIT rather than crashing
+the cycle when there's no usable headline data or the LLM is unavailable.
 """
 
-from backend.committee.llm.gemini_client import LLMUnavailableError, complete
+from backend.committee.llm.router import LLMUnavailableError, complete_for_agent
 from backend.committee.market_data.context import MarketContext
 from backend.committee.nlp.preprocess import clean_headlines
 from backend.committee.schemas import AgentOutput, Decision, LLMAgentVerdict
@@ -33,7 +33,7 @@ def analyze(context: MarketContext) -> AgentOutput:
     user_prompt = f"Stock: {context.symbol}\nRecent headlines:\n" + "\n".join(f"- {h}" for h in headlines)
 
     try:
-        verdict = complete(SYSTEM_PROMPT, user_prompt, LLMAgentVerdict)
+        verdict = complete_for_agent(AGENT_NAME, SYSTEM_PROMPT, user_prompt, LLMAgentVerdict)
         return verdict.to_agent_output(AGENT_NAME)
     except LLMUnavailableError as exc:
         return AgentOutput(
