@@ -117,7 +117,11 @@ FORECAST_META_PATH = "data/models/forecasting_meta.json"
 FORECAST_LAG_PERIODS = [1, 2, 3, 5, 10]
 FORECAST_VOLATILITY_WINDOW = 10
 FORECAST_LOOKAHEAD_BARS = 3  # bars ahead the label/prediction targets
-FORECAST_DEADZONE_RETURN = 0.0015  # |forward return| below this -> neutral label
+# Deadzone scales with each stock's own rolling volatility rather than a fixed
+# return -- a flat threshold mislabels a calm stock's noise as a real move and
+# a volatile stock's real moves as noise when pooled together for training.
+FORECAST_DEADZONE_VOL_MULTIPLIER = 0.5
+FORECAST_DEADZONE_MIN_RETURN = 0.0005  # floor so a near-zero rolling vol can't collapse the deadzone to ~0
 FORECAST_TRAIN_PERIOD = "60d"  # yfinance's max lookback at 15m interval
 FORECAST_TRAIN_INTERVAL = "15m"
 FORECAST_MIN_TRAINING_ROWS = 500

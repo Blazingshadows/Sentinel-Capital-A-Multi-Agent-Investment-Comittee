@@ -18,7 +18,8 @@ import pandas as pd
 
 from backend.committee.agents.technical import compute_ema, compute_macd, compute_rsi
 from backend.committee.config import (
-    FORECAST_DEADZONE_RETURN,
+    FORECAST_DEADZONE_MIN_RETURN,
+    FORECAST_DEADZONE_VOL_MULTIPLIER,
     FORECAST_LAG_PERIODS,
     FORECAST_LOOKAHEAD_BARS,
     FORECAST_META_PATH,
@@ -65,13 +66,26 @@ def build_features(ohlcv: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_labels(ohlcv: pd.DataFrame, lookahead: int = FORECAST_LOOKAHEAD_BARS,
-                  deadzone: float = FORECAST_DEADZONE_RETURN) -> pd.Series:
+                  vol_multiplier: float = FORECAST_DEADZONE_VOL_MULTIPLIER,
+                  min_deadzone: float = FORECAST_DEADZONE_MIN_RETURN) -> pd.Series:
+    """Bullish/bearish requires clearing a threshold scaled to this stock's
+    own rolling volatility over the `lookahead`-bar horizon, not a fixed
+    return -- a flat threshold mislabels a calm stock's noise as a real move
+    and a volatile stock's real moves as noise when pooled together for
+    training. `min_deadzone` floors it so a near-zero rolling vol (a dead
+    market open) can't collapse the threshold to ~0.
+    """
     closes = ohlcv["Close"]
     forward_return = closes.shift(-lookahead) / closes - 1
+
+    per_bar_vol = closes.pct_change().rolling(FORECAST_VOLATILITY_WINDOW).std()
+    horizon_vol = per_bar_vol * (lookahead ** 0.5)  # returns compound; variance scales with time under a random-walk assumption
+    deadzone = (vol_multiplier * horizon_vol).clip(lower=min_deadzone)
+
     labels = pd.Series(0, index=ohlcv.index)
     labels[forward_return > deadzone] = 1
     labels[forward_return < -deadzone] = -1
-    labels[forward_return.isna()] = pd.NA
+    labels[forward_return.isna() | deadzone.isna()] = pd.NA
     return labels
 
 

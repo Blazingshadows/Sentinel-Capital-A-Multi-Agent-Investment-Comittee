@@ -18,15 +18,41 @@ def test_build_features_only_uses_past_data():
     pd.testing.assert_frame_equal(full.iloc[:60], truncated, check_exact=False, rtol=1e-9)
 
 
-def test_build_labels_matches_manual_thresholding():
-    n = 20
-    closes = pd.Series(100.0 + np.arange(n) * 0.5, index=pd.date_range("2026-01-01", periods=n, freq="15min"))
-    # Force a clear bearish move at index 0 (label depends on closes[3] vs closes[0])
-    closes.iloc[3] = closes.iloc[0] * 0.9
+def test_build_labels_flags_a_large_move_on_a_calm_series():
+    n = 30
+    # Smooth, near-zero-volatility trend so rolling vol stays tiny and the
+    # min_deadzone floor governs.
+    closes = pd.Series(100.0 + np.arange(n) * 0.01, index=pd.date_range("2026-01-01", periods=n, freq="15min"))
+    closes.iloc[18] = closes.iloc[15] * 0.9  # -10% move, far beyond any reasonable deadzone
     ohlcv = pd.DataFrame({"Close": closes})
 
-    labels = forecasting.build_labels(ohlcv, lookahead=3, deadzone=0.001)
-    assert labels.iloc[0] == -1  # forward return well below -0.1%
+    labels = forecasting.build_labels(ohlcv, lookahead=3)
+
+    assert labels.iloc[15] == -1
+
+
+def test_deadzone_scales_with_volatility():
+    """The same size of move should register as signal on a calm stock but
+    get swallowed as noise on a volatile one -- the whole point of scaling
+    the deadzone instead of using one fixed return threshold for every
+    stock."""
+    n = 40
+    idx = pd.date_range("2026-01-01", periods=n, freq="15min")
+    rng = np.random.default_rng(3)
+    noise = rng.normal(0, 1, n)
+
+    low_vol_closes = pd.Series(100 * np.cumprod(1 + noise * 0.0005), index=idx)
+    high_vol_closes = pd.Series(100 * np.cumprod(1 + noise * 0.01), index=idx)
+
+    i = 25
+    low_vol_closes.iloc[i + 3] = low_vol_closes.iloc[i] * 1.003
+    high_vol_closes.iloc[i + 3] = high_vol_closes.iloc[i] * 1.003
+
+    low_labels = forecasting.build_labels(pd.DataFrame({"Close": low_vol_closes}), lookahead=3)
+    high_labels = forecasting.build_labels(pd.DataFrame({"Close": high_vol_closes}), lookahead=3)
+
+    assert low_labels.iloc[i] == 1  # +0.3% is a real move for a calm stock
+    assert high_labels.iloc[i] == 0  # +0.3% is noise for a volatile one
 
 
 def test_analyze_degrades_to_wait_without_a_trained_model(monkeypatch, synthetic_context, tmp_path):
