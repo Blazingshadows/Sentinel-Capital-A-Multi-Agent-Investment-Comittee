@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from backend.committee.agents import forecasting, macro, news_sentiment, technical
+from backend.committee.agents import algo_engine, forecasting, macro, news_sentiment, technical
 from backend.committee.config import BASE_EXPERTISE
 from backend.committee.consensus.orchestrator import run_consensus
 from backend.committee.debate.engine import run_debate
@@ -50,6 +50,7 @@ def evaluate_context(session: Session, context: MarketContext, cycle_ts: datetim
         news_sentiment.analyze(context),
         macro.analyze(context),
         forecasting.analyze(context),
+        algo_engine.analyze(context),
     ]
 
     debate = run_debate(context, original_recommendations)

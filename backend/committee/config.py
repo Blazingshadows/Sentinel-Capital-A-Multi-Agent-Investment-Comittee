@@ -96,14 +96,15 @@ BASE_EXPERTISE = {
     "Macro": 0.8,
     "Contrarian": 0.6,
     "Forecasting": 1.0,
+    "AlgoEngine": 1.0,
 }
 
 # Context multipliers applied to relevance on top of base expertise, keyed by
 # a context flag the orchestration loop sets per cycle (e.g. "earnings_day").
 CONTEXT_RELEVANCE_BOOST = {
-    "earnings_day": {"News & Sentiment": 1.5, "Technical": 1.0, "Macro": 1.0, "Contrarian": 1.0, "Forecasting": 1.0},
-    "rbi_policy_day": {"Macro": 1.8, "Technical": 1.0, "News & Sentiment": 1.0, "Contrarian": 1.0, "Forecasting": 1.0},
-    "normal": {"Technical": 1.0, "News & Sentiment": 1.0, "Macro": 1.0, "Contrarian": 1.0, "Forecasting": 1.0},
+    "earnings_day": {"News & Sentiment": 1.5, "Technical": 1.0, "Macro": 1.0, "Contrarian": 1.0, "Forecasting": 1.0, "AlgoEngine": 1.0},
+    "rbi_policy_day": {"Macro": 1.8, "Technical": 1.0, "News & Sentiment": 1.0, "Contrarian": 1.0, "Forecasting": 1.0, "AlgoEngine": 1.0},
+    "normal": {"Technical": 1.0, "News & Sentiment": 1.0, "Macro": 1.0, "Contrarian": 1.0, "Forecasting": 1.0, "AlgoEngine": 1.0},
 }
 
 # --- Debate Layer ------------------------------------------------------------
@@ -167,3 +168,22 @@ FORECAST_DEADZONE_MIN_RETURN = 0.0005  # floor so a near-zero rolling vol can't 
 FORECAST_TRAIN_PERIOD = "180d"  # Breeze has no 60d cap (yfinance did); can grow toward its ~3yr retention later
 FORECAST_TRAIN_INTERVAL = "5m"  # Breeze's get_historical_data_v2 has no native 15m bucket
 FORECAST_MIN_TRAINING_ROWS = 500
+
+# --- AlgoEngine (signal-library search + backtest-ranked model ensemble) ---
+# A systematic-signals research pipeline distinct from Forecasting's single
+# hand-picked feature set: searches many (signal-subset x model architecture)
+# candidates, ranks them by backtested Sharpe (not accuracy), and fuses the
+# survivors into one ensemble. See backend/committee/signals/ and
+# backend/committee/algo_engine/.
+ALGO_MODEL_DIR = "data/models/algo_engine"
+ALGO_ENSEMBLE_MANIFEST_PATH = "data/models/algo_engine/ensemble.json"
+ALGO_TRAIN_PERIOD = FORECAST_TRAIN_PERIOD
+ALGO_TRAIN_INTERVAL = FORECAST_TRAIN_INTERVAL
+ALGO_MIN_TRAINING_ROWS = FORECAST_MIN_TRAINING_ROWS
+ALGO_MODEL_ARCHITECTURES = ["lightgbm", "xgboost", "random_forest"]
+ALGO_RANDOM_SUBSET_COUNT = 15  # random signal-subset candidates on top of the one-per-style + all-combined subsets
+ALGO_RANDOM_SUBSET_FRACTION = 0.5  # fraction of all signals sampled into each random subset
+ALGO_WALK_FORWARD_FOLDS = 4  # expanding-window folds per symbol, pooled across WATCHLIST
+ALGO_TOP_K = 5  # number of top-by-Sharpe candidates fused into the final ensemble
+ALGO_SEED = 42
+ALGO_BACKTEST_FREQ = "5min"  # matches ALGO_TRAIN_INTERVAL, passed to vectorbt/compute_returns_stats
