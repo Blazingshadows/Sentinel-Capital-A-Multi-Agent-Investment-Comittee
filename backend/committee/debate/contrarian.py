@@ -1,10 +1,13 @@
 """Contrarian Agent — README's fourth specialist and the Debate Layer's
-challenger. Reviews the other three agents' independent recommendations,
-attacks weak arguments, surfaces alternative interpretations, and casts its
-own directional vote in the same call.
+challenger. Reviews the other agents' independent recommendations, attacks
+weak arguments, surfaces alternative interpretations, and casts its own
+directional vote in the same call. Routed to its own LLM provider (see
+config.AGENT_PROVIDER_MAP) deliberately — a different lab's model is more
+likely to genuinely disagree than the same model prompted to play devil's
+advocate.
 """
 
-from backend.committee.llm.gemini_client import LLMUnavailableError, complete
+from backend.committee.llm.router import LLMUnavailableError, complete_for_agent
 from backend.committee.market_data.context import MarketContext
 from backend.committee.schemas import AgentOutput, ContrarianVerdict, Decision
 
@@ -35,7 +38,7 @@ def analyze(context: MarketContext, original_recommendations: list[AgentOutput])
     )
 
     try:
-        return complete(SYSTEM_PROMPT, user_prompt, ContrarianVerdict)
+        return complete_for_agent(AGENT_NAME, SYSTEM_PROMPT, user_prompt, ContrarianVerdict)
     except LLMUnavailableError as exc:
         return ContrarianVerdict(
             decision=Decision.WAIT,
