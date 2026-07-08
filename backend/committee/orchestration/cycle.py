@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from backend.committee.agents import macro, news_sentiment, technical
+from backend.committee.agents import forecasting, macro, news_sentiment, technical
 from backend.committee.config import BASE_EXPERTISE
 from backend.committee.consensus.orchestrator import run_consensus
 from backend.committee.debate.engine import run_debate
@@ -44,6 +44,7 @@ def process_context(session: Session, portfolio: Portfolio, context: MarketConte
         technical.analyze(context),
         news_sentiment.analyze(context),
         macro.analyze(context),
+        forecasting.analyze(context),
     ]
 
     debate = run_debate(context, original_recommendations)
