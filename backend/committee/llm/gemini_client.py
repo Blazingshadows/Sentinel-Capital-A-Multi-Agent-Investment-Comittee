@@ -19,6 +19,8 @@ T = TypeVar("T", bound=BaseModel)
 
 _configured = False
 
+_UNSUPPORTED_SCHEMA_KEYS = {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"}
+
 
 class LLMUnavailableError(RuntimeError):
     """No API key configured, or every attempt returned an unusable response."""
@@ -33,12 +35,24 @@ def _ensure_configured() -> None:
         _configured = True
 
 
+def _strip_unsupported_schema_keys(value):
+    if isinstance(value, dict):
+        return {
+            key: _strip_unsupported_schema_keys(child)
+            for key, child in value.items()
+            if key not in _UNSUPPORTED_SCHEMA_KEYS
+        }
+    if isinstance(value, list):
+        return [_strip_unsupported_schema_keys(item) for item in value]
+    return value
+
+
 def complete(system: str, user: str, schema: type[T]) -> T:
     _ensure_configured()
     model = genai.GenerativeModel(MODEL_NAME, system_instruction=system)
     generation_config = genai.GenerationConfig(
         response_mime_type="application/json",
-        response_schema=schema,
+        response_schema=_strip_unsupported_schema_keys(schema.model_json_schema()),
     )
 
     last_error: Exception | None = None

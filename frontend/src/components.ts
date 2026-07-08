@@ -13,7 +13,10 @@ export function renderStatTiles(container: HTMLElement, portfolio: PortfolioStat
   const positionCount = Object.values(portfolio.positions).filter((qty) => qty !== 0).length;
 
   const tiles: { label: string; value: string; delta?: { text: string; positive: boolean } }[] = [
-    { label: "Cash", value: formatCurrency(portfolio.cash) },
+    { label: "Starting value", value: formatCurrency(report.starting_value) },
+    { label: "Starting cash", value: formatCurrency(report.starting_cash) },
+    { label: "Current value", value: formatCurrency(report.portfolio_value) },
+    { label: "Current cash", value: formatCurrency(report.current_cash) },
     {
       label: "Net P&L",
       value: formatCurrency(report.net_pnl),

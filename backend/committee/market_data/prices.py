@@ -1,21 +1,35 @@
-"""OHLCV ingestion for the watchlist. Live pulls are cached to
-`data/historical/` so a network hiccup (or Replay Mode, see
-`backend/committee/replay/`) can fall back to the last good pull.
+"""OHLCV ingestion for the watchlist, sourced from ICICI Direct's Breeze API
+(see `breeze_client.py`). Live pulls are cached to `data/historical/` so a
+network hiccup (or Replay Mode, see `backend/committee/replay/`) can fall
+back to the last good pull.
 
 The cache *accumulates* across calls rather than being overwritten each
-time. yfinance's intraday `period` cap (60d) is a per-call window, not a
-hard ceiling on how much history the cache can hold: each day's fetch
-mostly overlaps the previous one but also slides the window forward by
-roughly a day, so calling this repeatedly over weeks grows the effective
-history well past 60 days for free — no paid data source needed.
+time. This mattered most under yfinance's 60-day intraday cap; Breeze itself
+allows a much longer lookback (get_historical_data_v2 is good for ~3 years),
+but accumulation is still cheap insurance against thinning that window out
+by re-requesting it every call.
 """
 
+import re
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-import yfinance as yf
+
+from backend.committee.market_data import breeze_client
 
 DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "historical"
+
+
+def _period_to_range(period: str) -> tuple[datetime, datetime]:
+    """Parses a "60d"/"180d"-style period string into a (from, to) range
+    ending now, matching the convention every caller already passes."""
+    match = re.fullmatch(r"(\d+)d", period)
+    if not match:
+        raise ValueError(f"unsupported period format: {period!r} (expected e.g. '60d')")
+    days = int(match.group(1))
+    to_date = datetime.now()
+    return to_date - timedelta(days=days), to_date
 
 
 def cache_path(symbol: str, interval: str) -> Path:
@@ -38,7 +52,8 @@ def _merge_with_cache(new_df: pd.DataFrame, path: Path) -> pd.DataFrame:
 
 
 def fetch_ohlcv(symbol: str, period: str = "60d", interval: str = "5m", use_cache_on_failure: bool = True) -> pd.DataFrame:
-    """Pulls OHLCV for `symbol` (NSE, `.NS` suffix added automatically).
+    """Pulls OHLCV for `symbol` from Breeze (NSE; see `config.BREEZE_STOCK_CODE_MAP`
+    for the symbol -> Breeze stock_code translation).
 
     Falls back to the last cached pull for this symbol/interval if the live
     fetch fails or returns empty (rate limit, no network, market closed with
@@ -51,11 +66,10 @@ def fetch_ohlcv(symbol: str, period: str = "60d", interval: str = "5m", use_cach
     path = cache_path(symbol, interval)
 
     try:
-        df = yf.download(f"{symbol}.NS", period=period, interval=interval, progress=False, auto_adjust=True)
+        from_date, to_date = _period_to_range(period)
+        df = breeze_client.fetch_historical_ohlcv(symbol, from_date, to_date, interval=interval)
         if df.empty:
             raise ValueError(f"empty OHLCV response for {symbol}")
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
         merged = _merge_with_cache(df, path)
         merged.to_csv(path)
         return merged

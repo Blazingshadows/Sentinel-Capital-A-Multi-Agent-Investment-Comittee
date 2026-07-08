@@ -15,3 +15,5 @@ dist/
 frontend/.vite/
 .pytest_cache/
 *.egg-info/
+logs/
+extracttoken.py

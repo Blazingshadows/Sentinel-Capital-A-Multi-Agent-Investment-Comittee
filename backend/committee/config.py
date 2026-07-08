@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     newsapi_key: str = ""
     database_url: str = "sqlite:///./data/committee.db"
 
+    # ICICI Direct Breeze API. api_secret is a static app credential; the
+    # session token is an api_session value SEBI requires the user to grab
+    # via a manual browser login every trading day (expires at midnight) --
+    # there's no automated way around that, so this must be refreshed daily.
+    breeze_api_key: str = ""
+    breeze_api_secret: str = ""
+    breeze_session_token: str = ""
+
 
 settings = Settings()
 
@@ -25,7 +33,7 @@ CAPITAL = 10_000.0
 LEVERAGE = 2
 BUYING_POWER = CAPITAL * LEVERAGE
 
-# --- Watchlist (liquid NSE large-caps; yfinance ticker = SYMBOL + ".NS") ----
+# --- Watchlist (liquid NSE large-caps) --------------------------------------
 WATCHLIST = [
     "RELIANCE",
     "TCS",
@@ -38,6 +46,40 @@ WATCHLIST = [
     "LT",
     "ADANIENT",
 ]
+
+# Breeze's own stock_code, which is NOT the NSE tradingsymbol (e.g. RELIANCE's
+# code is "RELIND"). Verified 2026-07-09 against a live account by fetching
+# each symbol via breeze_client and cross-checking INFY through get_names().
+BREEZE_STOCK_CODE_MAP = {
+    "RELIANCE": "RELIND",
+    "TCS": "TCS",
+    "HDFCBANK": "HDFBAN",
+    "INFY": "INFTEC",
+    "ICICIBANK": "ICIBAN",
+    "SBIN": "STABAN",
+    "TATAMOTORS": "TATMOT",
+    "ITC": "ITC",
+    "LT": "LARTOU",
+    "ADANIENT": "ADAENT",
+}
+
+# Breeze has no fundamentals/sector data (it's a trading API, not a data
+# vendor) -- static lookup for the fixed watchlist replaces yfinance's
+# `.info` for the two fields the Macro agent actually reads. marketCap
+# figures are rough approximations (mid-2020s levels), not live values --
+# fine for a soft LLM prompt hint, but refresh periodically if precision matters.
+WATCHLIST_FUNDAMENTALS = {
+    "RELIANCE": {"sector": "Energy", "marketCap": 19_500_000_000_000},
+    "TCS": {"sector": "Information Technology", "marketCap": 13_500_000_000_000},
+    "HDFCBANK": {"sector": "Financial Services", "marketCap": 12_500_000_000_000},
+    "INFY": {"sector": "Information Technology", "marketCap": 6_200_000_000_000},
+    "ICICIBANK": {"sector": "Financial Services", "marketCap": 8_500_000_000_000},
+    "SBIN": {"sector": "Financial Services", "marketCap": 7_000_000_000_000},
+    "TATAMOTORS": {"sector": "Automobile", "marketCap": 3_400_000_000_000},
+    "ITC": {"sector": "Fast Moving Consumer Goods", "marketCap": 5_500_000_000_000},
+    "LT": {"sector": "Construction", "marketCap": 4_800_000_000_000},
+    "ADANIENT": {"sector": "Diversified", "marketCap": 2_700_000_000_000},
+}
 
 # --- Consensus Orchestrator (README "Dynamic Trust Framework") -------------
 # Agent Influence = Confidence x Trust x Context Relevance
@@ -116,12 +158,12 @@ FORECAST_MODEL_PATH = "data/models/forecasting_lgbm.txt"
 FORECAST_META_PATH = "data/models/forecasting_meta.json"
 FORECAST_LAG_PERIODS = [1, 2, 3, 5, 10]
 FORECAST_VOLATILITY_WINDOW = 10
-FORECAST_LOOKAHEAD_BARS = 3  # bars ahead the label/prediction targets
+FORECAST_LOOKAHEAD_BARS = 9  # bars ahead the label/prediction targets -- 9x5m = ~45min horizon (was 3x15m under yfinance)
 # Deadzone scales with each stock's own rolling volatility rather than a fixed
 # return -- a flat threshold mislabels a calm stock's noise as a real move and
 # a volatile stock's real moves as noise when pooled together for training.
 FORECAST_DEADZONE_VOL_MULTIPLIER = 0.5
 FORECAST_DEADZONE_MIN_RETURN = 0.0005  # floor so a near-zero rolling vol can't collapse the deadzone to ~0
-FORECAST_TRAIN_PERIOD = "60d"  # yfinance's max lookback at 15m interval
-FORECAST_TRAIN_INTERVAL = "15m"
+FORECAST_TRAIN_PERIOD = "180d"  # Breeze has no 60d cap (yfinance did); can grow toward its ~3yr retention later
+FORECAST_TRAIN_INTERVAL = "5m"  # Breeze's get_historical_data_v2 has no native 15m bucket
 FORECAST_MIN_TRAINING_ROWS = 500

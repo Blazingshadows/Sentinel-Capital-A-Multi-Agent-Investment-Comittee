@@ -37,7 +37,7 @@ from backend.committee.orchestration.cycle import process_context  # noqa: E402
 from backend.committee.persistence.db import init_db, make_engine, make_session_factory  # noqa: E402
 from backend.committee.replay.player import ReplayFeed, load_cached_ohlcv  # noqa: E402
 
-INTERVAL = "15m"
+INTERVAL = "5m"
 
 
 async def run_committee_equity_curve(symbol: str) -> pd.Series:

@@ -5,8 +5,8 @@ independently."""
 from dataclasses import dataclass, field
 
 import pandas as pd
-import yfinance as yf
 
+from backend.committee.config import WATCHLIST_FUNDAMENTALS
 from backend.committee.market_data.news import fetch_headlines
 from backend.committee.market_data.prices import fetch_ohlcv
 
@@ -26,13 +26,12 @@ class MarketContext:
 
 
 def fetch_fundamentals(symbol: str) -> tuple[dict, str | None]:
-    """`.info` is a slow, occasionally-flaky yfinance call — failures degrade
-    to an empty fundamentals dict rather than aborting the whole cycle."""
-    try:
-        info = yf.Ticker(f"{symbol}.NS").info
-        return info, info.get("sector")
-    except Exception:
-        return {}, None
+    """Breeze is a trading/quotes API with no fundamentals or sector data --
+    unlike yfinance's `.info`, so this looks up a small static table for the
+    fixed watchlist instead. Unknown symbols degrade to an empty fundamentals
+    dict rather than aborting the whole cycle."""
+    info = WATCHLIST_FUNDAMENTALS.get(symbol, {})
+    return info, info.get("sector")
 
 
 def build_context(symbol: str, period: str = "60d", interval: str = "5m", news_limit: int = 10,

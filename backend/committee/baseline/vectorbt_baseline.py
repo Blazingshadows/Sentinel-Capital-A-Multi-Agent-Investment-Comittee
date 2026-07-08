@@ -25,7 +25,7 @@ FEE_RATE = 0.001
 SLIPPAGE_RATE = 0.0003
 
 
-def build_price_panel(symbols: list[str] = WATCHLIST, period: str = "60d", interval: str = "15m") -> pd.DataFrame:
+def build_price_panel(symbols: list[str] = WATCHLIST, period: str = "60d", interval: str = "5m") -> pd.DataFrame:
     """One column per symbol; symbols that fail to fetch are silently
     dropped (mirrors the committee's own tolerance for a missing/delisted
     watchlist entry)."""

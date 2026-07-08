@@ -79,7 +79,7 @@ def main() -> None:
     if len(train_x) < FORECAST_MIN_TRAINING_ROWS:
         raise SystemExit(
             f"Only {len(train_x)} training rows pooled (need >= {FORECAST_MIN_TRAINING_ROWS}). "
-            "Check network access / yfinance availability and try again."
+            "Check BREEZE_SESSION_TOKEN hasn't expired (refresh it daily) and try again."
         )
 
     train_classes = train_y.map(LABEL_TO_CLASS)

@@ -65,6 +65,10 @@ export interface PortfolioState {
 }
 
 export interface ReportSummary {
+  starting_value: number;
+  starting_cash: number;
+  portfolio_value: number;
+  current_cash: number;
   trade_count: number;
   gross_pnl: number;
   total_costs: number;

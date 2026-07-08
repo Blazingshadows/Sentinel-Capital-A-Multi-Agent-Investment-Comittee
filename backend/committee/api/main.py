@@ -159,6 +159,10 @@ def report(request: Request) -> dict:
         portfolio_value = curve[-1].portfolio_value if curve else CAPITAL
         summary = summarize_pnl(session, portfolio_value)
         return {
+            "starting_value": CAPITAL,
+            "starting_cash": BUYING_POWER,
+            "portfolio_value": portfolio_value,
+            "current_cash": request.app.state.portfolio.cash,
             "trade_count": summary.trade_count,
             "gross_pnl": summary.gross_pnl,
             "total_costs": summary.total_costs,
