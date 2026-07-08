@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.committee.config import settings
 
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 T = TypeVar("T", bound=BaseModel)
 
