@@ -43,7 +43,8 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
     for symbol in watchlist:
         try:
             context = build_context(symbol, context_flags=context_flags)
-            consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts)
+            current_position = portfolio.positions.get(symbol, 0.0)
+            consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts, current_position)
             evaluations.append((context, consensus, risk_verdict, revised_recommendations))
         except Exception:
             logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)

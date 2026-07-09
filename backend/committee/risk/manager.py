@@ -15,12 +15,24 @@ from backend.committee.schemas import ConsensusDecision, Decision, RiskAction, R
 def evaluate(context: MarketContext, consensus: ConsensusDecision) -> RiskVerdict:
     volatility = estimate_annualized_volatility(context.ohlcv["Close"])
 
-    if consensus.decision == Decision.WAIT:
+    if consensus.decision in (Decision.WAIT, Decision.HOLD):
         return RiskVerdict(
             action=RiskAction.APPROVE,
             approved_allocation=0.0,
             volatility_estimate=volatility,
-            reason="Consensus is WAIT — no position to size or risk-check.",
+            reason=f"Consensus is {consensus.decision.value} — no new capital requested, nothing to risk-check.",
+        )
+
+    if consensus.decision == Decision.SWITCH:
+        # SWITCH always exits the current position -- reducing exposure is
+        # never something the risk layer should block, even at extreme
+        # volatility (refusing to let a position close would be the actively
+        # dangerous outcome here, not the safe one).
+        return RiskVerdict(
+            action=RiskAction.APPROVE,
+            approved_allocation=0.0,
+            volatility_estimate=volatility,
+            reason="Consensus is SWITCH — exiting to reallocate into a stronger candidate; exits are always approved.",
         )
 
     if volatility > EXTREME_VOLATILITY_ANNUALIZED:

@@ -18,11 +18,14 @@ Breeze quirks that shape this module:
 
 import time
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 import pandas as pd
-from breeze_connect import BreezeConnect
 
 from backend.committee.config import BREEZE_STOCK_CODE_MAP, settings
+
+if TYPE_CHECKING:
+    from breeze_connect import BreezeConnect
 
 EXCHANGE_CODE = "NSE"
 MAX_CANDLES_PER_REQUEST = 1000
@@ -42,15 +45,25 @@ class BreezeAuthError(BreezeError):
     """Breeze credentials are missing or the session token is invalid/expired."""
 
 
-_client: BreezeConnect | None = None
+_client: "BreezeConnect | None" = None
 
 
-def _get_client() -> BreezeConnect:
+def _get_client() -> "BreezeConnect":
     """Lazily authenticates and caches a single BreezeConnect session for
     the process lifetime -- mirrors forecasting.py's _model_cache pattern.
     Note: since the session token is only valid until midnight, a
     long-running process must be restarted after BREEZE_SESSION_TOKEN is
-    refreshed in .env for the next trading day."""
+    refreshed in .env for the next trading day.
+
+    The `breeze_connect` import itself is deferred to inside this function
+    (not module level) because the package does a live network call
+    (urlopen against its security-master URL) as a side effect of import --
+    at module level, that made the whole API process crash on startup
+    whenever the network hiccuped, even for endpoints that never touch
+    market data. Deferring it means only the first actual Breeze call pays
+    that cost, and a transient failure here degrades to BreezeAuthError
+    like any other Breeze error instead of taking down the process.
+    """
     global _client
     if _client is not None:
         return _client
@@ -61,6 +74,11 @@ def _get_client() -> BreezeConnect:
             "(from https://api.icicidirect.com/apiuser/home), log in there to grab today's api_session, "
             "and set it as BREEZE_SESSION_TOKEN. It expires at midnight -- refresh it every trading day."
         )
+
+    try:
+        from breeze_connect import BreezeConnect
+    except Exception as exc:
+        raise BreezeAuthError(f"Failed to load breeze_connect (network issue at import time?): {exc}") from exc
 
     client = BreezeConnect(api_key=settings.breeze_api_key)
     try:

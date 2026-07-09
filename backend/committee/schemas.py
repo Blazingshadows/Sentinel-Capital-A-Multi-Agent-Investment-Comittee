@@ -17,7 +17,9 @@ from pydantic import BaseModel, Field, computed_field
 class Decision(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
+    HOLD = "HOLD"
     WAIT = "WAIT"
+    SWITCH = "SWITCH"
 
 
 class RiskAction(str, Enum):
@@ -39,7 +41,11 @@ class AgentOutput(BaseModel):
     @computed_field
     @property
     def signed_vote(self) -> float:
-        sign = {Decision.BUY: 1, Decision.SELL: -1, Decision.WAIT: 0}[self.decision]
+        # HOLD/SWITCH are consensus-level decisions (they need portfolio
+        # position and cross-symbol context no individual specialist has) --
+        # specialists only ever emit BUY/SELL/WAIT. Mapped to 0 here anyway
+        # so this never KeyErrors if that assumption is ever violated.
+        sign = {Decision.BUY: 1, Decision.SELL: -1, Decision.WAIT: 0, Decision.HOLD: 0, Decision.SWITCH: 0}[self.decision]
         return sign * self.confidence
 
 

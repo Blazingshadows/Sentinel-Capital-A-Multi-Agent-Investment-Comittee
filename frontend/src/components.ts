@@ -1,10 +1,17 @@
 import { formatCurrency } from "./format";
 import type { DecisionRow, PortfolioState, ReportSummary, TradeRow } from "./types";
 
+const BADGE_CLASS: Record<string, string> = {
+  BUY: "buy",
+  SELL: "sell",
+  HOLD: "hold",
+  WAIT: "wait",
+  SWITCH: "switch",
+};
+
 function badge(decision: string): HTMLElement {
   const span = document.createElement("span");
-  const cls = decision === "BUY" ? "buy" : decision === "SELL" ? "sell" : "wait";
-  span.className = `badge ${cls}`;
+  span.className = `badge ${BADGE_CLASS[decision] ?? "wait"}`;
   span.textContent = decision;
   return span;
 }

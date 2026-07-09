@@ -11,7 +11,9 @@ from backend.committee.schemas import ConsensusDecision, DebateResult, Decision
 from backend.committee.trust.scoring import build_influences
 
 
-def run_consensus(session: Session, symbol: str, debate: DebateResult, context_flags: list[str]) -> ConsensusDecision:
+def run_consensus(
+    session: Session, symbol: str, debate: DebateResult, context_flags: list[str], current_position: float = 0.0
+) -> ConsensusDecision:
     influences = build_influences(session, debate.revised_recommendations, context_flags)
 
     # Directional Confidence Score: weighted sum of signed votes, in [-1, 1].
@@ -19,7 +21,12 @@ def run_consensus(session: Session, symbol: str, debate: DebateResult, context_f
     confidence = abs(dcs)
 
     if confidence < DECISION_THRESHOLD_WAIT:
-        decision = Decision.WAIT
+        # No clear edge either way. PS distinguishes WAIT (nothing held, no
+        # reason to act) from HOLD (a position already exists and the
+        # committee's lack of a new edge is itself a decision to maintain
+        # it, not silence) -- individual specialists never see portfolio
+        # state, so this distinction can only be made here.
+        decision = Decision.HOLD if current_position != 0 else Decision.WAIT
         allocation = 0.0
     else:
         decision = Decision.BUY if dcs > 0 else Decision.SELL

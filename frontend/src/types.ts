@@ -1,4 +1,4 @@
-export type Decision = "BUY" | "SELL" | "WAIT";
+export type Decision = "BUY" | "SELL" | "HOLD" | "WAIT" | "SWITCH";
 
 export interface AgentOutput {
   agent: string;

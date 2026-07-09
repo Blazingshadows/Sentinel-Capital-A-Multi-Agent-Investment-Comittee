@@ -40,8 +40,10 @@ def execute(portfolio: Portfolio, consensus: ConsensusDecision, risk_verdict: Ri
     """
     current_qty = portfolio.positions.get(consensus.symbol, 0.0)
 
-    if consensus.decision == Decision.WAIT or risk_verdict.action == RiskAction.REJECT or risk_verdict.approved_allocation <= 0:
-        target_qty = current_qty  # WAIT/REJECT means hold whatever's already there, not liquidate it
+    if consensus.decision == Decision.SWITCH:
+        target_qty = 0.0  # fully exit -- the alternative symbol gets its own BUY this same cycle
+    elif consensus.decision in (Decision.WAIT, Decision.HOLD) or risk_verdict.action == RiskAction.REJECT or risk_verdict.approved_allocation <= 0:
+        target_qty = current_qty  # WAIT/HOLD/REJECT means hold whatever's already there, not liquidate it
     else:
         direction = 1 if consensus.decision == Decision.BUY else -1
         target_notional = direction * risk_verdict.approved_allocation * BUYING_POWER
