@@ -118,6 +118,12 @@ section > h2 {
   margin: 0 0 10px;
 }
 
+.section-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: -6px 0 10px;
+}
+
 .stat-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -234,6 +240,23 @@ tbody tr.selected {
 .badge.wait {
   color: var(--text-muted);
   background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+tfoot td {
+  padding: 8px 10px;
+  border-top: 1px solid var(--gridline);
+  font-variant-numeric: tabular-nums;
+}
+
+tr.ledger-total td {
+  font-weight: 700;
+}
+
+.ledger-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 12px 0 0;
 }
 
 .empty-state {
