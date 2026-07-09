@@ -17,7 +17,6 @@ export function renderStatTiles(container: HTMLElement, portfolio: PortfolioStat
     { label: "Base buying power", value: formatCurrency(report.base_buying_power) },
     { label: "Current capital", value: formatCurrency(report.current_capital) },
     { label: "Current buying power", value: formatCurrency(report.current_buying_power) },
-    { label: "Cash", value: formatCurrency(report.current_cash) },
     {
       label: "Net P&L",
       value: formatCurrency(report.net_pnl),
@@ -189,6 +188,91 @@ export function renderDecisionDetail(container: HTMLElement, row: DecisionRow | 
   risk.appendChild(riskLabel);
   risk.appendChild(document.createTextNode(row.risk_reason));
   container.appendChild(risk);
+}
+
+/** Raw broker cash is a ledger balance, not equity -- shorting a stock credits
+ * proceeds to cash while the position carries an offsetting negative value, so
+ * cash alone drifts away from the "buying power" tile up top. This renders the
+ * per-stock cash flows that add up to that ledger balance, so the number is
+ * traceable instead of appearing out of nowhere. */
+export function renderCashLedger(container: HTMLElement, trades: TradeRow[], baseCapital: number, currentCash: number): void {
+  container.innerHTML = "";
+
+  if (trades.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No trades yet — the ledger starts at base capital.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const byStock = new Map<string, { tradeCount: number; netFlow: number }>();
+  for (const trade of trades) {
+    const entry = byStock.get(trade.stock) ?? { tradeCount: 0, netFlow: 0 };
+    entry.tradeCount += 1;
+    entry.netFlow += trade.net_cash_flow;
+    byStock.set(trade.stock, entry);
+  }
+
+  const rows = [...byStock.entries()].sort((a, b) => Math.abs(b[1].netFlow) - Math.abs(a[1].netFlow));
+  const totalFlow = rows.reduce((sum, [, entry]) => sum + entry.netFlow, 0);
+
+  const table = document.createElement("table");
+  table.innerHTML = "<thead><tr><th>Stock</th><th>Trades</th><th>Net cash flow</th></tr></thead>";
+  const tbody = document.createElement("tbody");
+
+  const startRow = document.createElement("tr");
+  const startLabelCell = document.createElement("td");
+  startLabelCell.textContent = "Starting cash";
+  const startDashCell = document.createElement("td");
+  startDashCell.textContent = "-";
+  const startValueCell = document.createElement("td");
+  startValueCell.textContent = formatCurrency(baseCapital);
+  startRow.append(startLabelCell, startDashCell, startValueCell);
+  tbody.appendChild(startRow);
+
+  for (const [stock, entry] of rows) {
+    const tr = document.createElement("tr");
+
+    const stockCell = document.createElement("td");
+    stockCell.textContent = stock;
+    tr.appendChild(stockCell);
+
+    const countCell = document.createElement("td");
+    countCell.textContent = String(entry.tradeCount);
+    tr.appendChild(countCell);
+
+    const flowCell = document.createElement("td");
+    flowCell.textContent = `${entry.netFlow >= 0 ? "+" : ""}${formatCurrency(entry.netFlow)}`;
+    tr.appendChild(flowCell);
+
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+
+  const tfoot = document.createElement("tfoot");
+  const totalRow = document.createElement("tr");
+  totalRow.className = "ledger-total";
+  const totalLabelCell = document.createElement("td");
+  totalLabelCell.textContent = "Ledger cash balance";
+  const totalCountCell = document.createElement("td");
+  totalCountCell.textContent = String(trades.length);
+  const totalValueCell = document.createElement("td");
+  totalValueCell.textContent = formatCurrency(baseCapital + totalFlow);
+  totalRow.append(totalLabelCell, totalCountCell, totalValueCell);
+  tfoot.appendChild(totalRow);
+  table.appendChild(tfoot);
+
+  container.appendChild(table);
+
+  const note = document.createElement("p");
+  note.className = "ledger-note";
+  note.textContent =
+    "This is the broker's raw cash ledger, not spendable profit or equity. " +
+    "Short sales credit proceeds here while the offsetting position value is negative, so cash can run well above " +
+    `starting capital (${formatCurrency(baseCapital)}) even when the portfolio is flat. Reconciled balance: ${formatCurrency(currentCash)}.`;
+  container.appendChild(note);
 }
 
 export function renderTradesTable(container: HTMLElement, trades: TradeRow[]): void {

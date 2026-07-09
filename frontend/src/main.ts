@@ -1,6 +1,6 @@
 import "./style.css";
 import { api } from "./api";
-import { renderDecisionDetail, renderDecisionsTable, renderStatTiles, renderTradesTable } from "./components";
+import { renderCashLedger, renderDecisionDetail, renderDecisionsTable, renderStatTiles, renderTradesTable } from "./components";
 import { renderPortfolioChart } from "./charts/portfolioChart";
 import type { DecisionRow } from "./types";
 
@@ -34,6 +34,12 @@ app.innerHTML = `
   </section>
 
   <section>
+    <h2>Cash ledger</h2>
+    <p class="section-subtitle">Raw broker cash, broken down by the trades that built it up. Not the same as buying power above.</p>
+    <div class="table-card" id="cash-ledger"></div>
+  </section>
+
+  <section>
     <h2>Trade log</h2>
     <div class="table-card" id="trades-table"></div>
   </section>
@@ -43,6 +49,7 @@ const statTilesEl = document.querySelector<HTMLDivElement>("#stat-tiles")!;
 const chartEl = document.querySelector<HTMLDivElement>("#portfolio-chart")!;
 const decisionsTableEl = document.querySelector<HTMLDivElement>("#decisions-table")!;
 const decisionDetailEl = document.querySelector<HTMLDivElement>("#decision-detail")!;
+const cashLedgerEl = document.querySelector<HTMLDivElement>("#cash-ledger")!;
 const tradesTableEl = document.querySelector<HTMLDivElement>("#trades-table")!;
 const statusLineEl = document.querySelector<HTMLSpanElement>("#status-line")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run-watchlist")!;
@@ -74,6 +81,7 @@ async function refresh(): Promise<void> {
   renderPortfolioChart(chartEl, curve);
   renderDecisionsTable(decisionsTableEl, decisions, selectDecision, selectedDecision?.id ?? null);
   renderDecisionDetail(decisionDetailEl, selectedDecision);
+  renderCashLedger(cashLedgerEl, trades, report.base_capital, report.current_cash);
   renderTradesTable(tradesTableEl, trades);
 }
 
