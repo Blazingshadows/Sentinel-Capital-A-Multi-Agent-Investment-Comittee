@@ -30,6 +30,7 @@ class AgentPrediction(Base):
     agent: Mapped[str] = mapped_column(String, nullable=False)
     direction: Mapped[int] = mapped_column(Integer, nullable=False)  # -1 / 0 / 1
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    price_at_prediction: Mapped[float | None] = mapped_column(Float, nullable=True)
     outcome_direction: Mapped[int | None] = mapped_column(Integer, nullable=True)
     correct: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 0/1
 

@@ -3,11 +3,11 @@ schemas everything else in the committee already speaks. Callers never
 construct a `models.*` row by hand.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from backend.committee.config import TRUST_PRIOR
+from backend.committee.config import FORECAST_DEADZONE_MIN_RETURN, FORECAST_LOOKAHEAD_BARS, TRUST_PRIOR
 from backend.committee.persistence import models
 from backend.committee.schemas import (
     AgentInfluence,
@@ -64,35 +64,72 @@ def insert_decision_log(session: Session, log: DecisionLog) -> int:
     return row.id
 
 
-def record_agent_predictions(session: Session, cycle_ts: datetime, stock: str, outputs: list[AgentOutput]) -> None:
+_DIRECTION_BY_DECISION = {
+    DecisionEnum.BUY: 1,
+    DecisionEnum.SELL: -1,
+    DecisionEnum.WAIT: 0,
+    DecisionEnum.HOLD: 0,
+    DecisionEnum.SWITCH: 0,
+}
+
+# Predictions are resolved against the price move over roughly this many
+# bars, not the very next one -- see backfill_prediction_outcomes.
+_PREDICTION_RESOLUTION_HORIZON = timedelta(minutes=5 * FORECAST_LOOKAHEAD_BARS)
+
+
+def record_agent_predictions(
+    session: Session, cycle_ts: datetime, stock: str, outputs: list[AgentOutput], price: float
+) -> None:
     for output in outputs:
         session.add(
             models.AgentPrediction(
                 cycle_ts=cycle_ts,
                 stock=stock,
                 agent=output.agent,
-                direction={DecisionEnum.BUY: 1, DecisionEnum.SELL: -1, DecisionEnum.WAIT: 0}[output.decision],
+                direction=_DIRECTION_BY_DECISION[output.decision],
                 confidence=output.confidence,
+                price_at_prediction=price,
             )
         )
     session.commit()
 
 
-def backfill_prediction_outcomes(session: Session, stock: str, before: datetime, actual_direction: int) -> None:
-    """Called at the start of the next cycle for `stock`: resolves every
-    still-open prediction against the price move that actually happened, so
-    the Dynamic Trust Framework has fresh accuracy data to work with."""
+def backfill_prediction_outcomes(session: Session, stock: str, before: datetime, current_price: float) -> None:
+    """Resolves predictions against the price move over roughly their own
+    intended horizon (`FORECAST_LOOKAHEAD_BARS` x 5-minute bars, the
+    project-wide bar size) instead of the very next bar's raw sign.
 
-    open_predictions = (
+    Previously this resolved *every* open prediction on the very next cycle
+    against a single next-bar up/down/flat read -- noise-dominated (a single
+    5-minute bar is close to a coin flip for a large-cap) and horizon-
+    mismatched for the Forecasting agent specifically, whose own training
+    label targets a `FORECAST_LOOKAHEAD_BARS`-bar move, not a 1-bar one. A
+    prediction now only resolves once that much wall-clock time has actually
+    elapsed since it was made, compared directly against the price at
+    prediction time -- the same volatility-scaled-deadzone philosophy
+    Forecasting's own labels use (a flat deadzone here, not volatility-
+    scaled, is the deliberate simplification: no rolling-vol series is
+    available at resolution time without re-fetching history).
+    """
+    cutoff = before - _PREDICTION_RESOLUTION_HORIZON
+    ready = (
         session.query(models.AgentPrediction)
         .filter(
             models.AgentPrediction.stock == stock,
-            models.AgentPrediction.cycle_ts < before,
+            models.AgentPrediction.cycle_ts <= cutoff,
             models.AgentPrediction.outcome_direction.is_(None),
+            models.AgentPrediction.price_at_prediction.is_not(None),
         )
         .all()
     )
-    for prediction in open_predictions:
+    for prediction in ready:
+        forward_return = (current_price - prediction.price_at_prediction) / prediction.price_at_prediction
+        if forward_return > FORECAST_DEADZONE_MIN_RETURN:
+            actual_direction = 1
+        elif forward_return < -FORECAST_DEADZONE_MIN_RETURN:
+            actual_direction = -1
+        else:
+            actual_direction = 0
         prediction.outcome_direction = actual_direction
         prediction.correct = int(prediction.direction == actual_direction)
     session.commit()

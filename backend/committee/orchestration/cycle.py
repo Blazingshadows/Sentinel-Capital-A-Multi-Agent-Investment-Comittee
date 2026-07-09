@@ -14,7 +14,6 @@ through — Replay Mode is just an alternate way of producing a
 
 from datetime import datetime, timezone
 
-import pandas as pd
 from sqlalchemy.orm import Session
 
 from backend.committee.agents import forecasting, macro, news_sentiment, technical
@@ -29,16 +28,6 @@ from backend.committee.schemas import AgentOutput, ConsensusDecision, DecisionLo
 from backend.committee.trust.scoring import refresh_trust_scores
 
 
-def _latest_bar_direction(ohlcv: pd.DataFrame) -> int:
-    """Approximates "did the stock just go up or down" from the two most
-    recent bars — the outcome signal used to resolve the previous cycle's
-    open agent predictions for the Dynamic Trust Framework."""
-    if len(ohlcv) < 2:
-        return 0
-    diff = ohlcv["Close"].iloc[-1] - ohlcv["Close"].iloc[-2]
-    return 1 if diff > 0 else (-1 if diff < 0 else 0)
-
-
 def evaluate_context(
     session: Session, context: MarketContext, cycle_ts: datetime, current_position: float = 0.0
 ) -> tuple[ConsensusDecision, RiskVerdict, list[AgentOutput]]:
@@ -46,8 +35,7 @@ def evaluate_context(
     `current_position` (this symbol's existing qty, signed) is only used to
     let the Consensus layer distinguish HOLD from WAIT; it never reaches the
     specialist agents, which reason about the stock in isolation."""
-    actual_direction = _latest_bar_direction(context.ohlcv)
-    repository.backfill_prediction_outcomes(session, context.symbol, before=cycle_ts, actual_direction=actual_direction)
+    repository.backfill_prediction_outcomes(session, context.symbol, before=cycle_ts, current_price=context.latest_price)
     refresh_trust_scores(session, list(BASE_EXPERTISE))
 
     original_recommendations = [
@@ -78,7 +66,7 @@ def finalize_cycle(
     calling this, via `orchestration.allocator.allocate_capital`."""
     trade: TradeRecord = execute(portfolio, consensus, risk_verdict, context.latest_price)
 
-    repository.record_agent_predictions(session, cycle_ts, context.symbol, revised_recommendations)
+    repository.record_agent_predictions(session, cycle_ts, context.symbol, revised_recommendations, context.latest_price)
 
     log = DecisionLog(cycle_ts=cycle_ts, stock=context.symbol, consensus=consensus, risk_verdict=risk_verdict, trade=trade)
     repository.insert_decision_log(session, log)
