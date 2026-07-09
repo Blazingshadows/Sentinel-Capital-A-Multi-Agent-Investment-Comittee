@@ -1,6 +1,6 @@
 import type { DecisionRow, PortfolioSnapshotRow, PortfolioState, ReportSummary, TradeRow } from "./types";
 
-const BASE_URL = "http://127.0.0.1:8000";
+const BASE_URL = "http://127.0.0.1:8001";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`);
