@@ -28,6 +28,13 @@ async def lifespan(app: FastAPI):
     app.state.portfolio = Portfolio()
     app.state.discovery_agent = None  # built lazily on first /discovery call
     app.state.last_discovery = None
+    # Single shared dict a running watchlist/replay pass mutates in place
+    # (see loop.run_watchlist_once's `progress` param) and /session/progress
+    # reads back -- `busy` guards against two passes racing on the same
+    # `app.state.portfolio` at once, since only one dashboard session runs
+    # at a time.
+    app.state.progress = {"phase": "idle", "mode": None, "detail": "Idle."}
+    app.state.busy = False
     yield
 
 
@@ -126,12 +133,19 @@ def trigger_cycle(symbol: str, request: Request) -> dict:
 
 @app.post("/watchlist/run")
 def trigger_watchlist(request: Request) -> list[dict]:
+    if request.app.state.busy:
+        raise HTTPException(status_code=409, detail="A session is already running.")
+    request.app.state.busy = True
+    request.app.state.progress.clear()
+    request.app.state.progress.update({"phase": "starting", "mode": "watchlist", "detail": "Starting..."})
     session = request.app.state.session_factory()
     try:
-        logs = run_watchlist_once(session, request.app.state.portfolio)
+        logs = run_watchlist_once(session, request.app.state.portfolio, progress=request.app.state.progress)
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()
+        request.app.state.busy = False
+        request.app.state.progress["phase"] = "idle"
 
 
 @app.post("/session/square-off")
@@ -157,13 +171,40 @@ async def trigger_replay(request: Request, max_bars: int = 20, seconds_per_tick:
     called the single-symbol replay path per symbol in a loop, bypassing
     the cross-symbol allocator and driving the book to a simulated -204%;
     see replay/player.py's module docstring)."""
-    await run_replay_session(
-        request.app.state.session_factory,
-        request.app.state.portfolio,
-        max_bars=max_bars,
-        seconds_per_tick=seconds_per_tick,
-    )
+    if request.app.state.busy:
+        raise HTTPException(status_code=409, detail="A session is already running.")
+    request.app.state.busy = True
+    request.app.state.progress.clear()
+    request.app.state.progress.update({"phase": "starting", "mode": "replay", "detail": "Starting replay..."})
+    try:
+        await run_replay_session(
+            request.app.state.session_factory,
+            request.app.state.portfolio,
+            max_bars=max_bars,
+            seconds_per_tick=seconds_per_tick,
+            progress=request.app.state.progress,
+        )
+    finally:
+        request.app.state.busy = False
+        request.app.state.progress["phase"] = "idle"
     return {"status": "complete", "max_bars": max_bars}
+
+
+@app.get("/session/progress")
+def session_progress(request: Request) -> dict:
+    """Poll target for a running /watchlist/run or /replay/run pass. Shape
+    depends on `phase`:
+    - "idle" | "starting" | "error": just `phase`, `mode`, `detail`.
+    - "discovering": + `universe_size`/`scanned`/`survived_scan`/
+      `selected_count`/`watchlist` once Discovery finishes (see
+      orchestration/watchlist.py).
+    - "evaluating" | "executing": + `current_symbol`, `symbols_completed`,
+      `symbols_total`.
+    - replay mode additionally carries `bars_played`/`max_bars` once ticks
+      start (see replay/player.py).
+    All keys are best-effort -- a caller should treat any of them as
+    possibly absent depending on how far the current pass has gotten."""
+    return dict(request.app.state.progress)
 
 
 @app.post("/discovery/run")

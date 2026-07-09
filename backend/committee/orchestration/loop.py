@@ -285,17 +285,28 @@ def square_off_all_positions(session: Session, portfolio: Portfolio) -> list[Dec
     return logs
 
 
-async def run_forever(session_factory, watchlist: list[str] = WATCHLIST, interval_seconds: int = 300,
-                       force_run_outside_market_hours: bool = False, use_discovery: bool = True,
-                       progress: dict | None = None) -> None:
+async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
+                       interval_seconds: int = 300, force_run_outside_market_hours: bool = False,
+                       use_discovery: bool = True, progress: dict | None = None) -> None:
     """Asyncio loop, one watchlist pass every `interval_seconds` during NSE
     market hours. `force_run_outside_market_hours` exists for Replay Mode
     callers and local development, so the loop never has to be duplicated.
     `use_discovery=True` runs Opportunity Discovery once at session start to
     pick the actual traded watchlist (see orchestration/watchlist.py);
     `watchlist` is only used as the Discovery-disabled/Discovery-failed
-    fallback."""
-    portfolio = Portfolio()
+    fallback.
+
+    `portfolio` is the caller's shared instance (the API layer's
+    `app.state.portfolio`), not a fresh one built here -- other endpoints
+    (`/portfolio`, `/report`) read that same object, so a locally-created
+    Portfolio would silently desync the dashboard from what this loop is
+    actually trading.
+
+    Each pass runs via `asyncio.to_thread` -- `run_watchlist_once` is
+    synchronous and makes real, multi-second LLM/market-data calls; calling
+    it directly here would block this coroutine's event loop for the whole
+    pass, starving any concurrent request (e.g. a progress poll) until the
+    pass finishes instead of just until the next `await`."""
     session_watchlist = watchlist
     if use_discovery:
         from backend.committee.orchestration.watchlist import select_session_watchlist
@@ -308,14 +319,14 @@ async def run_forever(session_factory, watchlist: list[str] = WATCHLIST, interva
         if force_run_outside_market_hours or now_market_hours:
             session = session_factory()
             try:
-                run_watchlist_once(session, portfolio, session_watchlist, progress=progress)
+                await asyncio.to_thread(run_watchlist_once, session, portfolio, session_watchlist, progress=progress)
             finally:
                 session.close()
         elif was_market_hours:
             # Just crossed the square-off boundary -- flatten everything.
             session = session_factory()
             try:
-                square_off_all_positions(session, portfolio)
+                await asyncio.to_thread(square_off_all_positions, session, portfolio)
             finally:
                 session.close()
         was_market_hours = now_market_hours

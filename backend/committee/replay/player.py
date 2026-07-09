@@ -105,7 +105,8 @@ def _build_feed(symbol: str, interval: str) -> ReplayFeed:
 
 async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
                               interval: str = "5m", max_bars: int = INTRADAY_BARS_PER_DAY,
-                              seconds_per_tick: float = 5.0) -> None:
+                              seconds_per_tick: float = 5.0, use_discovery: bool = True,
+                              progress: dict | None = None) -> None:
     """Demo entrypoint for outside market hours: one `ReplayFeed` per
     watchlist symbol, advanced in lockstep -- every tick pulls the next
     cached bar for *every* symbol at once and runs them through
@@ -115,29 +116,57 @@ async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: l
     replay bypassing them. Runs until `max_bars` ticks, the earliest-
     exhausted symbol's cache runs out, or the caller's asyncio Task is
     cancelled -- mirrors `run_session`'s cancellation contract exactly, so
-    the API layer can start/stop it the same way."""
+    the API layer can start/stop it the same way.
+
+    `use_discovery=True` runs Opportunity Discovery once up front, same as
+    a live session, so a demo replay exercises the same watchlist-selection
+    path being judged rather than a fixed 10-symbol list.
+
+    Each tick's `run_watchlist_once` call runs via `asyncio.to_thread` --
+    it's synchronous and makes real LLM calls, so calling it directly here
+    would block this coroutine's event loop for the whole tick, starving a
+    concurrent progress poll until the tick finished instead of just until
+    the next `await`."""
+    session_watchlist = watchlist
+    if use_discovery:
+        from backend.committee.orchestration.watchlist import select_session_watchlist
+
+        session_watchlist = select_session_watchlist(progress)
+
     feeds: dict[str, ReplayFeed] = {}
-    for symbol in watchlist:
+    for symbol in session_watchlist:
         try:
             feeds[symbol] = _build_feed(symbol, interval)
         except Exception:
             logger.exception("Replay feed setup failed for %s -- excluded from this replay session.", symbol)
 
-    active_watchlist = [symbol for symbol in watchlist if symbol in feeds]
+    active_watchlist = [symbol for symbol in session_watchlist if symbol in feeds]
     if not active_watchlist:
         logger.error("No symbols had usable cached data -- replay session has nothing to play.")
+        if progress is not None:
+            progress["phase"] = "error"
+            progress["detail"] = "No symbols had usable cached data for replay."
         return
+
+    if progress is not None:
+        progress["max_bars"] = max_bars
+        progress["bars_played"] = 0
 
     bars_played = 0
     while bars_played < max_bars and all(feeds[symbol].has_next() for symbol in active_watchlist):
         contexts_this_tick = {symbol: feeds[symbol].next_context() for symbol in active_watchlist}
         session = session_factory()
         try:
-            run_watchlist_once(session, portfolio, active_watchlist, context_provider=lambda s: contexts_this_tick[s])
+            await asyncio.to_thread(
+                run_watchlist_once, session, portfolio, active_watchlist,
+                context_provider=lambda s: contexts_this_tick[s], progress=progress,
+            )
         except Exception:
             logger.exception("Replay tick failed.")
         finally:
             session.close()
         bars_played += 1
+        if progress is not None:
+            progress["bars_played"] = bars_played
         if seconds_per_tick:
             await asyncio.sleep(seconds_per_tick)
