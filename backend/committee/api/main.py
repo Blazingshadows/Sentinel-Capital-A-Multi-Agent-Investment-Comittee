@@ -17,6 +17,7 @@ from backend.committee.orchestration.cycle import run_cycle
 from backend.committee.orchestration.loop import run_watchlist_once
 from backend.committee.persistence import repository
 from backend.committee.persistence.db import init_db, make_engine, make_session_factory
+from backend.committee.replay.player import run_watchlist_replay
 
 
 @asynccontextmanager
@@ -125,6 +126,20 @@ def trigger_watchlist(request: Request) -> list[dict]:
     session = request.app.state.session_factory()
     try:
         logs = run_watchlist_once(session, request.app.state.portfolio)
+        return [log.model_dump(mode="json") for log in logs]
+    finally:
+        session.close()
+
+
+@app.post("/replay/run")
+async def trigger_replay(request: Request, max_bars: int = 5) -> list[dict]:
+    """Demo mode: replays cached OHLCV bars through the exact same committee
+    pipeline as a live cycle, so a demo can run without the market being open
+    or Breeze being reachable. Requires data/historical/<SYMBOL>_5m.csv to
+    already be cached from an earlier live pull."""
+    session = request.app.state.session_factory()
+    try:
+        logs = await run_watchlist_replay(session, request.app.state.portfolio, max_bars=max_bars)
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()

@@ -6,17 +6,21 @@ downstream needs to know whether a cycle came from live data or replay.
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from backend.committee.config import WATCHLIST
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.market_data.context import MarketContext, fetch_fundamentals
 from backend.committee.market_data.news import fetch_headlines
 from backend.committee.market_data.prices import cache_path, fetch_ohlcv
 from backend.committee.orchestration.cycle import process_context
 from backend.committee.schemas import DecisionLog
+
+logger = logging.getLogger(__name__)
 
 
 def load_cached_ohlcv(symbol: str, interval: str = "5m", period: str = "60d") -> pd.DataFrame:
@@ -75,4 +79,22 @@ async def run_replay(session: Session, portfolio: Portfolio, symbol: str, interv
         if seconds_per_bar:
             await asyncio.sleep(seconds_per_bar)
 
+    return logs
+
+
+async def run_watchlist_replay(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
+                                interval: str = "5m", max_bars: int = 5) -> list[DecisionLog]:
+    """Demo entrypoint: replays `max_bars` cached bars per watchlist symbol,
+    back-to-back with no artificial delay, so a dashboard demo outside market
+    hours doesn't depend on Breeze being reachable -- as long as each symbol
+    already has a cache file from an earlier live pull. One symbol's cache
+    being missing/corrupt shouldn't blank the rest of the demo, so failures
+    are isolated per symbol (same pattern as run_watchlist_once)."""
+    logs: list[DecisionLog] = []
+    for symbol in watchlist:
+        try:
+            logs.extend(await run_replay(session, portfolio, symbol, interval=interval, seconds_per_bar=0, max_bars=max_bars))
+        except Exception:
+            logger.exception("Replay failed for %s — skipping.", symbol)
+            continue
     return logs
