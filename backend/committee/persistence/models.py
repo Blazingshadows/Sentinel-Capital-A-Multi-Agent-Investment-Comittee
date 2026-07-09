@@ -59,6 +59,10 @@ class Decision(Base):
     risk_approved_allocation: Mapped[float] = mapped_column(Float, nullable=False)
     risk_volatility_estimate: Mapped[float] = mapped_column(Float, nullable=False)
     risk_reason: Mapped[str] = mapped_column(String, nullable=False)
+    risk_expected_return: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    risk_expected_drawdown: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    alternatives: Mapped[str | None] = mapped_column(JSON, nullable=True)  # list[AlternativeCandidate]
 
     action_taken: Mapped[str] = mapped_column(String, nullable=False)
     qty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

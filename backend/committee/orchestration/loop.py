@@ -15,13 +15,20 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from backend.committee.config import SESSION_SQUARE_OFF, SESSION_START, WATCHLIST
+from backend.committee.config import (
+    SESSION_SQUARE_OFF,
+    SESSION_START,
+    SWITCH_CONFIDENCE_MARGIN,
+    SWITCH_MIN_CONFIDENCE,
+    WATCHLIST,
+)
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.market_data.context import build_context
 from backend.committee.orchestration.allocator import AllocationCandidate, allocate_capital
 from backend.committee.orchestration.cycle import evaluate_context, finalize_cycle
 from backend.committee.persistence import repository
-from backend.committee.schemas import DecisionLog
+from backend.committee.risk import manager as risk_manager
+from backend.committee.schemas import AlternativeCandidate, Decision, DecisionLog
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +40,62 @@ def is_market_hours(now: datetime | None = None) -> bool:
     start = time.fromisoformat(SESSION_START)
     end = time.fromisoformat(SESSION_SQUARE_OFF)
     return start <= now.time() <= end
+
+
+def _apply_cross_symbol_comparison(evaluations: list[tuple], portfolio: Portfolio) -> list[tuple]:
+    """Ranks this cycle's candidates against each other -- only possible in a
+    watchlist pass, where every symbol is evaluated together. Two things a
+    single-symbol cycle structurally cannot do:
+
+    1. Attach the top alternatives to every decision (PS-mandated
+       "Alternative Stocks Considered" per-trade output).
+    2. Upgrade a held-but-unconvinced position (HOLD/WAIT) to SWITCH when an
+       unheld candidate both clears its own conviction bar and beats the
+       held symbol's confidence by a real margin -- otherwise SWITCH would
+       never fire, since nothing else in the pipeline compares symbols
+       against each other.
+    """
+    ranked = sorted(evaluations, key=lambda e: e[1].confidence, reverse=True)
+
+    updated = []
+    for context, consensus, risk_verdict, revised in evaluations:
+        alternatives = [
+            AlternativeCandidate(symbol=c.symbol, decision=c.decision, confidence=c.confidence)
+            for _, c, _, _ in ranked
+            if c.symbol != context.symbol
+        ][:2]
+        consensus = consensus.model_copy(update={"alternatives": alternatives})
+
+        current_qty = portfolio.positions.get(context.symbol, 0.0)
+        if current_qty != 0 and consensus.decision in (Decision.HOLD, Decision.WAIT):
+            best_alt = next(
+                (
+                    c
+                    for _, c, _, _ in ranked
+                    if c.symbol != context.symbol
+                    and portfolio.positions.get(c.symbol, 0.0) == 0
+                    and c.decision in (Decision.BUY, Decision.SELL)
+                    and c.confidence >= SWITCH_MIN_CONFIDENCE
+                    and c.confidence >= consensus.confidence + SWITCH_CONFIDENCE_MARGIN
+                ),
+                None,
+            )
+            if best_alt:
+                consensus = consensus.model_copy(
+                    update={
+                        "decision": Decision.SWITCH,
+                        "reasoning": (
+                            f"SWITCH: {context.symbol} only reached {consensus.decision.value} conviction "
+                            f"this cycle ({consensus.confidence:.2f}) while unheld {best_alt.symbol} shows "
+                            f"stronger {best_alt.decision.value} conviction ({best_alt.confidence:.2f}) -- "
+                            f"exiting {context.symbol} to free capital for it. Original reasoning: {consensus.reasoning}"
+                        ),
+                    }
+                )
+                risk_verdict = risk_manager.evaluate(context, consensus)
+
+        updated.append((context, consensus, risk_verdict, revised))
+    return updated
 
 
 def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
@@ -49,6 +112,8 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
         except Exception:
             logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
             continue
+
+    evaluations = _apply_cross_symbol_comparison(evaluations, portfolio)
 
     candidates = [
         AllocationCandidate(symbol=context.symbol, price=context.latest_price, consensus=consensus, risk_verdict=risk_verdict)

@@ -16,6 +16,12 @@ export interface DebateResult {
   revised_recommendations: AgentOutput[];
 }
 
+export interface AlternativeCandidate {
+  symbol: string;
+  decision: Decision;
+  confidence: number;
+}
+
 export interface DecisionRow {
   id: number;
   cycle_ts: string;
@@ -31,6 +37,9 @@ export interface DecisionRow {
   risk_approved_allocation: number;
   risk_volatility_estimate: number;
   risk_reason: string;
+  risk_expected_return: number;
+  risk_expected_drawdown: number;
+  alternatives: AlternativeCandidate[];
   action_taken: Decision;
   qty: number;
   price: number;

@@ -124,6 +124,17 @@ class AgentInfluence(BaseModel):
     signed_vote: float
 
 
+class AlternativeCandidate(BaseModel):
+    """One other watchlist symbol's consensus this same cycle, surfaced so a
+    decision can report the PS-mandated "Alternative Stocks Considered" --
+    only meaningful in a watchlist pass, where every symbol is evaluated
+    together; a single-symbol cycle has nothing to compare against."""
+
+    symbol: str
+    decision: Decision
+    confidence: float
+
+
 class ConsensusDecision(BaseModel):
     """Output of the Consensus Orchestrator for one stock, one cycle. Matches
     README's worked example: `{symbol, allocation, confidence, decision}`."""
@@ -135,6 +146,7 @@ class ConsensusDecision(BaseModel):
     reasoning: str
     influence_breakdown: list[AgentInfluence]
     debate: DebateResult
+    alternatives: list[AlternativeCandidate] = Field(default_factory=list)
 
 
 class RiskVerdict(BaseModel):
@@ -145,6 +157,12 @@ class RiskVerdict(BaseModel):
     approved_allocation: float = Field(ge=0.0, le=2.0)
     volatility_estimate: float = Field(ge=0.0, description="GARCH-estimated annualized volatility")
     reason: str
+    expected_return: float = Field(
+        default=0.0, description="Heuristic: signed, confidence x volatility scaled -- not a backtested figure"
+    )
+    expected_drawdown: float = Field(
+        default=0.0, ge=0.0, description="Heuristic: volatility-scaled worst-case-this-trade estimate"
+    )
 
 
 class CostBreakdown(BaseModel):
