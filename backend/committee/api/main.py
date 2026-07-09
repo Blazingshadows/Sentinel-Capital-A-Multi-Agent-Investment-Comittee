@@ -6,6 +6,7 @@ consume.
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,11 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
 from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE
 from backend.committee.execution.portfolio import Portfolio
-from backend.committee.orchestration.cycle import run_cycle
+from backend.committee.market_data.context import build_context
+from backend.committee.orchestration.cycle import finalize_cycle, run_cycle
 from backend.committee.orchestration.loop import run_watchlist_once, square_off_all_positions
 from backend.committee.persistence import repository
 from backend.committee.persistence.db import init_db, make_engine, make_session_factory
 from backend.committee.replay.player import run_replay_session
+
+EXECUTION_MODES = {"autonomous", "manual"}
 
 
 @asynccontextmanager
@@ -35,6 +39,10 @@ async def lifespan(app: FastAPI):
     # at a time.
     app.state.progress = {"phase": "idle", "mode": None, "detail": "Idle."}
     app.state.busy = False
+    # Manual-mode pending suggestions (see loop.run_watchlist_once and
+    # schemas.Suggestion), keyed by symbol -- a symbol's next cycle
+    # overwrites its own entry, and /suggestions/{symbol}/execute removes it.
+    app.state.suggestions = {}
     yield
 
 
@@ -132,7 +140,12 @@ def trigger_cycle(symbol: str, request: Request) -> dict:
 
 
 @app.post("/watchlist/run")
-def trigger_watchlist(request: Request) -> list[dict]:
+def trigger_watchlist(request: Request, execution_mode: str = "autonomous") -> list[dict]:
+    """`execution_mode="manual"` defers actionable (BUY/SELL/SWITCH)
+    decisions to /suggestions instead of auto-executing them -- see
+    schemas.Suggestion and loop.run_watchlist_once."""
+    if execution_mode not in EXECUTION_MODES:
+        raise HTTPException(status_code=400, detail=f"execution_mode must be one of {sorted(EXECUTION_MODES)}.")
     if request.app.state.busy:
         raise HTTPException(status_code=409, detail="A session is already running.")
     request.app.state.busy = True
@@ -140,7 +153,10 @@ def trigger_watchlist(request: Request) -> list[dict]:
     request.app.state.progress.update({"phase": "starting", "mode": "watchlist", "detail": "Starting..."})
     session = request.app.state.session_factory()
     try:
-        logs = run_watchlist_once(session, request.app.state.portfolio, progress=request.app.state.progress)
+        logs = run_watchlist_once(
+            session, request.app.state.portfolio, progress=request.app.state.progress,
+            execution_mode=execution_mode, suggestions=request.app.state.suggestions,
+        )
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()
@@ -163,14 +179,23 @@ def trigger_square_off(request: Request) -> list[dict]:
 
 
 @app.post("/replay/run")
-async def trigger_replay(request: Request, max_bars: int = 20, seconds_per_tick: float = 0.0) -> dict:
+async def trigger_replay(
+    request: Request, max_bars: int = 20, seconds_per_tick: float = 0.0, execution_mode: str = "autonomous"
+) -> dict:
     """Demo mode for outside market hours: plays cached historical bars for
     the whole watchlist in lockstep through run_watchlist_once -- the exact
     same allocator/stop-loss/cross-symbol-comparison path live trading uses,
     not a parallel implementation (an earlier version of this endpoint
     called the single-symbol replay path per symbol in a loop, bypassing
     the cross-symbol allocator and driving the book to a simulated -204%;
-    see replay/player.py's module docstring)."""
+    see replay/player.py's module docstring).
+
+    `execution_mode="manual"` defers actionable decisions to /suggestions
+    instead of auto-executing them -- pair with a nonzero `seconds_per_tick`
+    so there's actually time to click Execute before the next tick
+    supersedes a symbol's suggestion (see schemas.Suggestion)."""
+    if execution_mode not in EXECUTION_MODES:
+        raise HTTPException(status_code=400, detail=f"execution_mode must be one of {sorted(EXECUTION_MODES)}.")
     if request.app.state.busy:
         raise HTTPException(status_code=409, detail="A session is already running.")
     request.app.state.busy = True
@@ -183,6 +208,8 @@ async def trigger_replay(request: Request, max_bars: int = 20, seconds_per_tick:
             max_bars=max_bars,
             seconds_per_tick=seconds_per_tick,
             progress=request.app.state.progress,
+            execution_mode=execution_mode,
+            suggestions=request.app.state.suggestions,
         )
     finally:
         request.app.state.busy = False
@@ -205,6 +232,55 @@ def session_progress(request: Request) -> dict:
     All keys are best-effort -- a caller should treat any of them as
     possibly absent depending on how far the current pass has gotten."""
     return dict(request.app.state.progress)
+
+
+@app.get("/suggestions")
+def list_suggestions(request: Request) -> list[dict]:
+    """Currently pending manual-mode decisions awaiting an execute click
+    (see schemas.Suggestion) -- empty whenever no manual-mode session has
+    run, or every pending symbol has since been superseded or executed."""
+    return [s.model_dump(mode="json") for s in request.app.state.suggestions.values()]
+
+
+@app.post("/suggestions/{symbol}/execute")
+def execute_suggestion(symbol: str, request: Request) -> dict:
+    """Executes a pending manual-mode suggestion -- at a price re-fetched
+    right now, not the price it was suggested at, since intraday prices
+    move in the time a human takes to decide (see schemas.Suggestion's
+    docstring). 404s if the suggestion was already executed or has since
+    been superseded by that symbol's next cycle."""
+    symbol = symbol.upper()
+    suggestion = request.app.state.suggestions.get(symbol)
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail=f"No pending suggestion for {symbol}.")
+
+    session = request.app.state.session_factory()
+    try:
+        fresh_context = build_context(symbol)
+        executing_at = datetime.now(timezone.utc)
+        log = finalize_cycle(
+            session, request.app.state.portfolio, fresh_context,
+            suggestion.consensus, suggestion.risk_verdict, suggestion.revised_recommendations, executing_at,
+        )
+        snapshot = request.app.state.portfolio.mark_to_market({symbol: fresh_context.latest_price})
+        repository.insert_portfolio_snapshot(session, snapshot)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+    # Removes whatever is there now, not necessarily `suggestion` itself --
+    # if a background cycle superseded it in the narrow window above, that
+    # newer entry is stale too (this symbol was just executed against).
+    request.app.state.suggestions.pop(symbol, None)
+
+    return {
+        "decision": log.model_dump(mode="json"),
+        "suggested_price": suggestion.suggested_price,
+        "suggested_at": suggestion.suggested_at.isoformat(),
+        "executing_price": fresh_context.latest_price,
+        "executing_at": executing_at.isoformat(),
+    }
 
 
 @app.post("/discovery/run")

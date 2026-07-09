@@ -19,7 +19,7 @@ from backend.committee.market_data.news import fetch_headlines
 from backend.committee.market_data.prices import cache_path, fetch_ohlcv
 from backend.committee.orchestration.cycle import process_context
 from backend.committee.orchestration.loop import run_watchlist_once
-from backend.committee.schemas import DecisionLog
+from backend.committee.schemas import DecisionLog, Suggestion
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,8 @@ def _build_feed(symbol: str, interval: str) -> ReplayFeed:
 async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
                               interval: str = "5m", max_bars: int = INTRADAY_BARS_PER_DAY,
                               seconds_per_tick: float = 5.0, use_discovery: bool = True,
-                              progress: dict | None = None) -> None:
+                              progress: dict | None = None, execution_mode: str = "autonomous",
+                              suggestions: dict[str, Suggestion] | None = None) -> None:
     """Demo entrypoint for outside market hours: one `ReplayFeed` per
     watchlist symbol, advanced in lockstep -- every tick pulls the next
     cached bar for *every* symbol at once and runs them through
@@ -126,7 +127,12 @@ async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: l
     it's synchronous and makes real LLM calls, so calling it directly here
     would block this coroutine's event loop for the whole tick, starving a
     concurrent progress poll until the tick finished instead of just until
-    the next `await`."""
+    the next `await`.
+
+    `execution_mode`/`suggestions` pass straight through to
+    `run_watchlist_once` -- see its docstring. In manual mode a symbol's
+    suggestion naturally gets superseded by its own next tick here, same as
+    a live session's next cycle."""
     session_watchlist = watchlist
     if use_discovery:
         from backend.committee.orchestration.watchlist import select_session_watchlist
@@ -160,6 +166,7 @@ async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: l
             await asyncio.to_thread(
                 run_watchlist_once, session, portfolio, active_watchlist,
                 context_provider=lambda s: contexts_this_tick[s], progress=progress,
+                execution_mode=execution_mode, suggestions=suggestions,
             )
         except Exception:
             logger.exception("Replay tick failed.")

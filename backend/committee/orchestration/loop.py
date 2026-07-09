@@ -38,6 +38,7 @@ from backend.committee.schemas import (
     DecisionLog,
     RiskAction,
     RiskVerdict,
+    Suggestion,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,8 @@ def _apply_cross_symbol_comparison(evaluations: list[tuple], portfolio: Portfoli
 def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
                         context_flags: list[str] | None = None,
                         context_provider: Callable[[str], MarketContext] | None = None,
-                        progress: dict | None = None) -> list[DecisionLog]:
+                        progress: dict | None = None, execution_mode: str = "autonomous",
+                        suggestions: dict[str, Suggestion] | None = None) -> list[DecisionLog]:
     """`context_provider(symbol) -> MarketContext` overrides the default live
     Breeze fetch -- Replay Mode's only hook into this function, so a replay
     pass runs through the *exact* same allocator/stop-loss/cross-symbol-
@@ -163,7 +165,18 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
     `progress`, if given, is mutated in place (current_symbol/
     symbols_completed/symbols_total) so a caller polling it from another
     coroutine (the API layer) can show real per-symbol status instead of the
-    dashboard looking frozen for however long a full pass takes."""
+    dashboard looking frozen for however long a full pass takes.
+
+    `execution_mode="manual"` defers actionable decisions (BUY/SELL/SWITCH
+    with nonzero approved allocation) instead of auto-executing them: each
+    is written into `suggestions` (keyed by symbol, overwritten by that
+    symbol's next cycle -- see Suggestion's docstring) for a human to
+    execute later via the API layer's /suggestions/{symbol}/execute, which
+    re-fetches a fresh price at click time rather than using the price this
+    cycle evaluated at. HOLD/WAIT/rejected decisions have nothing to defer
+    and always finalize immediately in both modes, clearing any stale
+    suggestion for that symbol so it can't later be executed against a
+    decision the committee has since moved off of."""
     cycle_ts = datetime.now(timezone.utc)
     fetch_context = context_provider or (lambda symbol: build_context(symbol, context_flags=context_flags))
     evaluations = []
@@ -213,6 +226,28 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
 
     for context, consensus, risk_verdict, revised_recommendations in evaluations:
         final_verdict = adjusted_verdicts.get(context.symbol, risk_verdict)
+
+        is_actionable = (
+            consensus.decision in (Decision.BUY, Decision.SELL, Decision.SWITCH)
+            and final_verdict.action != RiskAction.REJECT
+            and final_verdict.approved_allocation != 0
+        )
+        if execution_mode == "manual" and suggestions is not None:
+            if is_actionable:
+                suggestions[context.symbol] = Suggestion(
+                    symbol=context.symbol,
+                    consensus=consensus,
+                    risk_verdict=final_verdict,
+                    revised_recommendations=revised_recommendations,
+                    suggested_price=context.latest_price,
+                    suggested_at=datetime.now(timezone.utc),
+                    cycle_ts=cycle_ts,
+                )
+                continue
+            # HOLD/WAIT/rejected this cycle -- nothing to suggest, and any
+            # earlier pending suggestion for this symbol is now stale.
+            suggestions.pop(context.symbol, None)
+
         try:
             log = finalize_cycle(session, portfolio, context, consensus, final_verdict, revised_recommendations, cycle_ts)
         except Exception:
@@ -287,7 +322,8 @@ def square_off_all_positions(session: Session, portfolio: Portfolio) -> list[Dec
 
 async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
                        interval_seconds: int = 300, force_run_outside_market_hours: bool = False,
-                       use_discovery: bool = True, progress: dict | None = None) -> None:
+                       use_discovery: bool = True, progress: dict | None = None,
+                       execution_mode: str = "autonomous", suggestions: dict[str, Suggestion] | None = None) -> None:
     """Asyncio loop, one watchlist pass every `interval_seconds` during NSE
     market hours. `force_run_outside_market_hours` exists for Replay Mode
     callers and local development, so the loop never has to be duplicated.
@@ -319,7 +355,10 @@ async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str
         if force_run_outside_market_hours or now_market_hours:
             session = session_factory()
             try:
-                await asyncio.to_thread(run_watchlist_once, session, portfolio, session_watchlist, progress=progress)
+                await asyncio.to_thread(
+                    run_watchlist_once, session, portfolio, session_watchlist,
+                    progress=progress, execution_mode=execution_mode, suggestions=suggestions,
+                )
             finally:
                 session.close()
         elif was_market_hours:
