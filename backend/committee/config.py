@@ -180,10 +180,50 @@ ALGO_ENSEMBLE_MANIFEST_PATH = "data/models/algo_engine/ensemble.json"
 ALGO_TRAIN_PERIOD = FORECAST_TRAIN_PERIOD
 ALGO_TRAIN_INTERVAL = FORECAST_TRAIN_INTERVAL
 ALGO_MIN_TRAINING_ROWS = FORECAST_MIN_TRAINING_ROWS
-ALGO_MODEL_ARCHITECTURES = ["lightgbm", "xgboost", "random_forest"]
 ALGO_RANDOM_SUBSET_COUNT = 15  # random signal-subset candidates on top of the one-per-style + all-combined subsets
 ALGO_RANDOM_SUBSET_FRACTION = 0.5  # fraction of all signals sampled into each random subset
 ALGO_WALK_FORWARD_FOLDS = 4  # expanding-window folds per symbol, pooled across WATCHLIST
 ALGO_TOP_K = 5  # number of top-by-Sharpe candidates fused into the final ensemble
 ALGO_SEED = 42
 ALGO_BACKTEST_FREQ = "5min"  # matches ALGO_TRAIN_INTERVAL, passed to vectorbt/compute_returns_stats
+
+# Three hyperparameter presets per architecture (conservative/default/
+# aggressive), varying capacity (num_leaves/max_depth/...) *and* explicit
+# regularization (L1/L2, gamma, ccp_alpha) together -- the pooled per-fold
+# training set is small (a few thousand rows in early folds) and the label
+# is a noisy volatility-scaled 3-way call, exactly the regime where
+# unpenalized boosting overfits fastest and reproduces the flip-flopping/
+# cost-drag problem the first (single-preset, unregularized) search run
+# showed. `algo_engine.models.build_model_configs` flattens this into the
+# list of ModelConfig candidates the search actually trains.
+ALGO_MODEL_PRESETS = {
+    "lightgbm": {
+        "conservative": {"num_leaves": 7, "min_data_in_leaf": 60, "learning_rate": 0.05, "lambda_l2": 5.0},
+        "default": {"num_leaves": 15, "min_data_in_leaf": 20, "learning_rate": 0.05, "lambda_l2": 0.0},
+        "aggressive": {"num_leaves": 31, "min_data_in_leaf": 10, "learning_rate": 0.1, "lambda_l2": 0.0},
+    },
+    "xgboost": {
+        "conservative": {"max_depth": 3, "min_child_weight": 10, "subsample": 0.7, "colsample_bytree": 0.7, "reg_lambda": 5.0, "gamma": 1.0, "learning_rate": 0.05},
+        "default": {"max_depth": 4, "min_child_weight": 1, "subsample": 1.0, "colsample_bytree": 1.0, "reg_lambda": 1.0, "gamma": 0.0, "learning_rate": 0.05},
+        "aggressive": {"max_depth": 6, "min_child_weight": 1, "subsample": 1.0, "colsample_bytree": 1.0, "reg_lambda": 0.0, "gamma": 0.0, "learning_rate": 0.1},
+    },
+    "random_forest": {
+        "conservative": {"max_depth": 4, "min_samples_leaf": 50, "n_estimators": 200, "ccp_alpha": 0.01},
+        "default": {"max_depth": 6, "min_samples_leaf": 20, "n_estimators": 200, "ccp_alpha": 0.0},
+        "aggressive": {"max_depth": 10, "min_samples_leaf": 10, "n_estimators": 500, "ccp_alpha": 0.0},
+    },
+}
+
+# Backtested post-hoc on each already-trained candidate's saved probabilities
+# (no retraining) -- 0.0 reproduces the old plain-argmax behavior; the
+# others require the winning class to beat the runner-up by a real margin
+# before entering a position, directly targeting the flip-flopping/
+# transaction-cost drag a razor-thin argmax call produces at 5-minute bars.
+ALGO_CONFIDENCE_THRESHOLDS = [0.0, 0.05, 0.10, 0.15]
+
+# Tail of each fold's training pool held out for LightGBM/XGBoost early
+# stopping, so the boosting-round count is chosen automatically per
+# (fold, config) instead of a fixed guess.
+ALGO_VALIDATION_FRACTION = 0.15
+ALGO_EARLY_STOPPING_ROUNDS = 20
+ALGO_MAX_BOOST_ROUNDS = 500

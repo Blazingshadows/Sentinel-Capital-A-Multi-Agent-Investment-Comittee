@@ -14,7 +14,6 @@ actually backtests well rather than hand-tuned weights.
 
 from pathlib import Path
 
-from backend.committee.agents.forecasting import CLASS_TO_LABEL
 from backend.committee.algo_engine.ensemble import EnsembleMember, fuse_probabilities, load_manifest
 from backend.committee.algo_engine.features import build_all_signals
 from backend.committee.algo_engine.models import FittedModel, load_model, predict_proba
@@ -99,20 +98,37 @@ def analyze(context: MarketContext) -> AgentOutput:
         )
 
     fused = fuse_probabilities(member_probs, weights)
-    predicted_class = int(fused.argmax())
-    predicted_label = CLASS_TO_LABEL[predicted_class]
-    confidence = float(fused[predicted_class])
-    decision = {-1: Decision.SELL, 0: Decision.WAIT, 1: Decision.BUY}[predicted_label]
+    confidence = float(fused.max())
+
+    # Same margin-gated decision rule search.py backtested each member's
+    # threshold against (see algo_engine.search._position_from_probs) --
+    # applying plain argmax here instead would vote on razor-thin edges the
+    # search never validated as worth trading.
+    total_weight = sum(weights)
+    agg_threshold = sum(w * m.threshold for w, m in zip(weights, contributing)) / total_weight if total_weight > 0 else 0.0
+    bearish, neutral, bullish = fused[0], fused[1], fused[2]
+    bullish_margin = bullish - max(bearish, neutral)
+    bearish_margin = bearish - max(neutral, bullish)
+    if bullish_margin > agg_threshold:
+        decision = Decision.BUY
+    elif bearish_margin > agg_threshold:
+        decision = Decision.SELL
+    else:
+        decision = Decision.WAIT
 
     top_members = sorted(contributing, key=lambda m: m.weight, reverse=True)[:3]
-    evidence = [f"{m.subset_name}/{m.model_type} (weight={m.weight:.2f}, backtest Sharpe={m.backtest_sharpe:.2f})" for m in top_members]
+    evidence = [
+        f"{m.subset_name}/{m.config_name} (weight={m.weight:.2f}, backtest Sharpe={m.backtest_sharpe:.2f}, threshold={m.threshold:.2f})"
+        for m in top_members
+    ]
 
     return AgentOutput(
         agent=AGENT_NAME,
         decision=decision,
         confidence=round(confidence, 4),
         reasoning=(
-            f"AlgoEngine ensemble ({len(contributing)}/{len(members)} members voted): "
+            f"AlgoEngine ensemble ({len(contributing)}/{len(members)} members voted, "
+            f"margin threshold={agg_threshold:.2f}): "
             f"P(bearish)={fused[0]:.2f}, P(neutral)={fused[1]:.2f}, P(bullish)={fused[2]:.2f}."
         ),
         evidence=evidence,

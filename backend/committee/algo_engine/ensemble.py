@@ -17,12 +17,15 @@ import pandas as pd
 from backend.committee.algo_engine.features import FeatureSubset
 from backend.committee.algo_engine.models import fit_model, load_model, predict_proba, save_model
 from backend.committee.algo_engine.search import CandidateResult, SymbolData, pooled_training_set
+from backend.committee.config import ALGO_VALIDATION_FRACTION
 
 
 @dataclass
 class EnsembleMember:
     subset_name: str
     model_type: str
+    config_name: str
+    threshold: float
     features: tuple[str, ...]
     weight: float
     backtest_sharpe: float
@@ -53,17 +56,18 @@ def build_ensemble(results: list[CandidateResult], symbol_data: list[SymbolData]
     members: list[EnsembleMember] = []
     for i, (result, weight) in enumerate(zip(top, weights)):
         subset = FeatureSubset(name=result.subset_name, features=result.features)
-        training_set = pooled_training_set(symbol_data, subset, fraction=1.0)
+        training_set = pooled_training_set(symbol_data, subset, fraction=1.0, val_fraction=ALGO_VALIDATION_FRACTION)
         if training_set is None:
             continue
-        train_x, train_y = training_set
+        train_x, train_y, val_x, val_y = training_set
 
-        fitted = fit_model(result.model_type, train_x, train_y, seed=seed)
-        path_stem = model_dir / f"{i:02d}_{result.subset_name}_{result.model_type}"
+        fitted = fit_model(result.model_config, train_x, train_y, val_x, val_y, seed=seed)
+        path_stem = model_dir / f"{i:02d}_{result.subset_name}_{result.model_config.name}"
         saved_path = save_model(fitted, path_stem)
 
         members.append(EnsembleMember(
-            subset_name=result.subset_name, model_type=result.model_type, features=result.features,
+            subset_name=result.subset_name, model_type=result.model_config.architecture, config_name=result.model_config.name,
+            threshold=result.threshold, features=result.features,
             weight=float(weight), backtest_sharpe=result.sharpe, model_path=str(saved_path),
         ))
 
@@ -82,8 +86,8 @@ def load_manifest(manifest_path: Path) -> list[EnsembleMember]:
     payload = json.loads(Path(manifest_path).read_text())
     return [
         EnsembleMember(
-            subset_name=m["subset_name"], model_type=m["model_type"], features=tuple(m["features"]),
-            weight=m["weight"], backtest_sharpe=m["backtest_sharpe"], model_path=m["model_path"],
+            subset_name=m["subset_name"], model_type=m["model_type"], config_name=m["config_name"], threshold=m["threshold"],
+            features=tuple(m["features"]), weight=m["weight"], backtest_sharpe=m["backtest_sharpe"], model_path=m["model_path"],
         )
         for m in payload["members"]
     ]

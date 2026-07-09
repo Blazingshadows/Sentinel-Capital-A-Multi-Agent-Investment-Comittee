@@ -4,7 +4,9 @@ import pandas as pd
 from backend.committee.agents import algo_engine, forecasting
 from backend.committee.algo_engine.ensemble import EnsembleMember, fuse_probabilities
 from backend.committee.algo_engine.features import build_all_signals, iter_feature_subsets
-from backend.committee.algo_engine.models import fit_model, save_model
+from backend.committee.algo_engine.models import ModelConfig, build_model_configs, fit_model, predict_proba, save_model
+from backend.committee.algo_engine.search import _position_from_probs
+from backend.committee.config import ALGO_MODEL_PRESETS
 from backend.committee.market_data.context import MarketContext
 from backend.committee.schemas import Decision
 from backend.committee.signals import SIGNAL_REGISTRY, STYLES
@@ -41,6 +43,51 @@ def test_fuse_probabilities_falls_back_to_uniform_when_weights_are_zero():
     np.testing.assert_allclose(fused, [0.5, 0.0, 0.5])
 
 
+def test_build_model_configs_creates_one_per_preset():
+    configs = build_model_configs(ALGO_MODEL_PRESETS)
+    names = {c.name for c in configs}
+    assert len(configs) == 9  # 3 architectures x 3 presets
+    for architecture, presets in ALGO_MODEL_PRESETS.items():
+        for preset_name in presets:
+            assert f"{architecture}_{preset_name}" in names
+
+
+def test_position_from_probs_at_zero_threshold_is_plain_argmax_bullish():
+    probs = np.array([[0.1, 0.2, 0.7], [0.6, 0.2, 0.2], [0.3, 0.4, 0.3]])
+    position = _position_from_probs(probs, threshold=0.0)
+    np.testing.assert_array_equal(position, [1, 0, 0])
+
+
+def test_fit_model_with_validation_data_early_stops_lightgbm_and_xgboost():
+    ohlcv = _synthetic_ohlcv(n=300)
+    trend_features = sorted(n for n, spec in SIGNAL_REGISTRY.items() if spec.style == "trend")
+    signals = build_all_signals(ohlcv)
+    labels = forecasting.build_labels(ohlcv)
+    combined = signals[trend_features].join(labels.rename("label")).dropna()
+    classes = combined["label"].map(forecasting.LABEL_TO_CLASS).astype(int)
+
+    split = int(len(combined) * 0.7)
+    train_x, train_y = combined[trend_features].iloc[:split], classes.iloc[:split]
+    val_x, val_y = combined[trend_features].iloc[split:], classes.iloc[split:]
+
+    for architecture in ("lightgbm", "xgboost"):
+        params = ALGO_MODEL_PRESETS[architecture]["default"]
+        config = ModelConfig(name=f"{architecture}_default", architecture=architecture, params=params)
+        fitted = fit_model(config, train_x, train_y, val_x, val_y, seed=1)
+        probs = predict_proba(fitted, val_x.iloc[[-1]])
+        assert probs.shape == (1, 3)
+        np.testing.assert_allclose(probs.sum(axis=1), [1.0], atol=1e-4)
+
+
+def test_position_from_probs_higher_threshold_requires_a_bigger_margin():
+    # bullish (0.38) beats the runner-up (0.32) by 0.06 -- clears a 0 threshold but not 0.10.
+    probs = np.array([[0.30, 0.32, 0.38]])
+    loose = _position_from_probs(probs, threshold=0.0)
+    strict = _position_from_probs(probs, threshold=0.10)
+    assert loose[0] == 1
+    assert strict[0] == 0
+
+
 def test_algo_engine_degrades_to_wait_without_a_trained_ensemble(monkeypatch, synthetic_context, tmp_path):
     monkeypatch.setattr(algo_engine, "_manifest_cache", None)
     monkeypatch.setattr(algo_engine, "_manifest_load_attempted", False)
@@ -61,12 +108,13 @@ def test_algo_engine_produces_a_valid_output_with_a_trained_ensemble(monkeypatch
     combined = signals[trend_features].join(labels.rename("label")).dropna()
     classes = combined["label"].map(forecasting.LABEL_TO_CLASS).astype(int)
 
-    fitted = fit_model("lightgbm", combined[trend_features], classes, seed=1)
+    config = ModelConfig(name="lightgbm_default", architecture="lightgbm", params={"num_leaves": 15, "min_data_in_leaf": 20, "learning_rate": 0.05})
+    fitted = fit_model(config, combined[trend_features], classes, seed=1)
     saved_path = save_model(fitted, tmp_path / "member0")
 
     member = EnsembleMember(
-        subset_name="style_trend", model_type="lightgbm", features=tuple(trend_features),
-        weight=1.0, backtest_sharpe=0.5, model_path=str(saved_path),
+        subset_name="style_trend", model_type="lightgbm", config_name="lightgbm_default", threshold=0.05,
+        features=tuple(trend_features), weight=1.0, backtest_sharpe=0.5, model_path=str(saved_path),
     )
 
     monkeypatch.setattr(algo_engine, "_manifest_cache", [member])
