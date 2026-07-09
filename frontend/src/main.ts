@@ -14,7 +14,6 @@ app.innerHTML = `
     <div class="controls">
       <span class="status-line" id="status-line"></span>
       <button id="run-watchlist">Run watchlist cycle</button>
-      <button id="run-replay" title="Replays cached historical bars through the committee -- for demos outside market hours">Run demo (cached data)</button>
     </div>
   </header>
 
@@ -54,7 +53,6 @@ const cashLedgerEl = document.querySelector<HTMLDivElement>("#cash-ledger")!;
 const tradesTableEl = document.querySelector<HTMLDivElement>("#trades-table")!;
 const statusLineEl = document.querySelector<HTMLSpanElement>("#status-line")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run-watchlist")!;
-const replayButton = document.querySelector<HTMLButtonElement>("#run-replay")!;
 
 let decisions: DecisionRow[] = [];
 let selectedDecision: DecisionRow | null = null;
@@ -109,20 +107,6 @@ runButton.addEventListener("click", async () => {
     statusLineEl.textContent = `Run failed: ${(error as Error).message}`;
   } finally {
     runButton.disabled = false;
-  }
-});
-
-replayButton.addEventListener("click", async () => {
-  replayButton.disabled = true;
-  statusLineEl.textContent = "Replaying cached bars…";
-  try {
-    await api.runReplay();
-    await refresh();
-    statusLineEl.textContent = `Replay complete: ${new Date().toLocaleTimeString("en-IN")}`;
-  } catch (error) {
-    statusLineEl.textContent = `Replay failed: ${(error as Error).message}`;
-  } finally {
-    replayButton.disabled = false;
   }
 });
 
