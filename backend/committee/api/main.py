@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
-from backend.committee.config import BUYING_POWER, CAPITAL
+from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.orchestration.cycle import run_cycle
 from backend.committee.orchestration.loop import run_watchlist_once
@@ -158,9 +158,17 @@ def report(request: Request) -> dict:
         curve = repository.get_portfolio_curve(session)
         portfolio_value = curve[-1].portfolio_value if curve else CAPITAL
         summary = summarize_pnl(session, portfolio_value)
+        # current_capital is mark-to-market equity (cash + position value), not raw
+        # cash -- shorting a stock inflates cash while the position carries an
+        # offsetting negative value, so cash alone drifts away from real capital.
+        # current_buying_power is derived from current_capital so it is always
+        # exactly LEVERAGE times capital, never independently out of sync.
+        current_capital = portfolio_value
         return {
-            "starting_value": CAPITAL,
-            "starting_cash": BUYING_POWER,
+            "base_capital": CAPITAL,
+            "base_buying_power": BUYING_POWER,
+            "current_capital": current_capital,
+            "current_buying_power": current_capital * LEVERAGE,
             "portfolio_value": portfolio_value,
             "current_cash": request.app.state.portfolio.cash,
             "trade_count": summary.trade_count,
