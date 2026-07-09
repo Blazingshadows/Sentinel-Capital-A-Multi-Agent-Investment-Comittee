@@ -1,4 +1,14 @@
-import type { DecisionRow, PortfolioSnapshotRow, PortfolioState, ReportSummary, SessionProgress, TradeRow } from "./types";
+import type {
+  DecisionRow,
+  ExecutionMode,
+  PortfolioSnapshotRow,
+  PortfolioState,
+  ReportSummary,
+  SessionProgress,
+  Suggestion,
+  SuggestionExecuteResult,
+  TradeRow,
+} from "./types";
 
 const BASE_URL = "http://127.0.0.1:8001";
 
@@ -22,8 +32,15 @@ export const api = {
   trades: (stock?: string) => getJson<TradeRow[]>(`/trades${stock ? `?stock=${stock}` : ""}`),
   report: () => getJson<ReportSummary>("/report"),
   runCycle: (symbol: string) => postJson<{ decision: DecisionRow; price: number }>(`/cycle/${symbol}`),
-  runWatchlist: () => postJson<DecisionRow[]>("/watchlist/run"),
-  runReplay: (maxBars = 20) => postJson<{ status: string; max_bars: number }>(`/replay/run?max_bars=${maxBars}`),
+  runWatchlist: (executionMode: ExecutionMode = "autonomous") =>
+    postJson<DecisionRow[]>(`/watchlist/run?execution_mode=${executionMode}`),
+  runReplay: (maxBars = 20, executionMode: ExecutionMode = "autonomous", secondsPerTick?: number) =>
+    postJson<{ status: string; max_bars: number }>(
+      `/replay/run?max_bars=${maxBars}&execution_mode=${executionMode}` +
+        (secondsPerTick !== undefined ? `&seconds_per_tick=${secondsPerTick}` : ""),
+    ),
   squareOff: () => postJson<unknown[]>("/session/square-off"),
   sessionProgress: () => getJson<SessionProgress>("/session/progress"),
+  suggestions: () => getJson<Suggestion[]>("/suggestions"),
+  executeSuggestion: (symbol: string) => postJson<SuggestionExecuteResult>(`/suggestions/${symbol}/execute`),
 };

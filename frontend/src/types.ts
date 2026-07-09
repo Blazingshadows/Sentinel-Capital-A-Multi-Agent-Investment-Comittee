@@ -73,6 +73,45 @@ export interface PortfolioState {
   positions: Record<string, number>;
 }
 
+export type ExecutionMode = "autonomous" | "manual";
+
+/** A manual-mode committee decision awaiting an execute click -- mirrors
+ * backend schemas.Suggestion, unflattened (nested consensus/risk_verdict)
+ * unlike DecisionRow's flat shape. */
+export interface Suggestion {
+  symbol: string;
+  consensus: {
+    symbol: string;
+    decision: Decision;
+    confidence: number;
+    allocation: number;
+    reasoning: string;
+    influence_breakdown: unknown[];
+    debate: DebateResult;
+    alternatives: AlternativeCandidate[];
+  };
+  risk_verdict: {
+    action: "APPROVE" | "REDUCE" | "REJECT";
+    approved_allocation: number;
+    volatility_estimate: number;
+    reason: string;
+    expected_return: number;
+    expected_drawdown: number;
+  };
+  revised_recommendations: AgentOutput[];
+  suggested_price: number;
+  suggested_at: string;
+  cycle_ts: string;
+}
+
+export interface SuggestionExecuteResult {
+  decision: DecisionRow;
+  suggested_price: number;
+  suggested_at: string;
+  executing_price: number;
+  executing_at: string;
+}
+
 export interface SessionProgress {
   phase: "idle" | "starting" | "discovering" | "evaluating" | "executing" | "error" | string;
   mode: "watchlist" | "replay" | null;

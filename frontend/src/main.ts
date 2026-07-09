@@ -4,12 +4,22 @@ import {
   renderCashLedger,
   renderDecisionDetail,
   renderDecisionsTable,
+  renderExecutionResult,
   renderProgressPanel,
   renderStatTiles,
+  renderSuggestions,
   renderTradesTable,
 } from "./components";
 import { renderPortfolioChart } from "./charts/portfolioChart";
-import type { DecisionRow } from "./types";
+import type { DecisionRow, ExecutionMode, SuggestionExecuteResult } from "./types";
+
+// Manual mode gives judges the human-in-the-loop control they asked for:
+// actionable committee decisions wait for an Execute click instead of
+// auto-executing. Replay's default seconds_per_tick=0 races the demo
+// through as fast as possible, which leaves no real think time before the
+// next tick supersedes a symbol's suggestion -- so manual-mode replay runs
+// slower on purpose (see api.main's /replay/run docstring).
+const MANUAL_REPLAY_SECONDS_PER_TICK = 20;
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -20,6 +30,12 @@ app.innerHTML = `
     </div>
     <div class="controls">
       <span class="status-line" id="status-line"></span>
+      <div class="mode-toggle">
+        <label><input type="radio" name="execution-mode" value="autonomous" checked /> Autonomous</label>
+        <label title="Actionable decisions wait for an Execute click instead of auto-executing">
+          <input type="radio" name="execution-mode" value="manual" /> Manual
+        </label>
+      </div>
       <button id="run-watchlist">Run watchlist cycle</button>
       <button id="run-replay" title="Plays cached historical bars through the exact same pipeline -- for demos outside market hours">Run demo (replay)</button>
       <button id="square-off" title="Force-closes every open position right now, same as the automatic end-of-day close">Square off all</button>
@@ -27,6 +43,13 @@ app.innerHTML = `
   </header>
 
   <div class="progress-panel hidden" id="progress-panel"></div>
+
+  <section>
+    <h2>Pending suggestions</h2>
+    <p class="section-subtitle">Manual-mode decisions awaiting an execute click. Superseded by that symbol's next cycle, not a timer.</p>
+    <div class="execution-result hidden" id="execution-result"></div>
+    <div class="suggestions-grid" id="suggestions-panel"></div>
+  </section>
 
   <section>
     <h2>Portfolio</h2>
@@ -57,6 +80,8 @@ app.innerHTML = `
 `;
 
 const progressPanelEl = document.querySelector<HTMLDivElement>("#progress-panel")!;
+const suggestionsPanelEl = document.querySelector<HTMLDivElement>("#suggestions-panel")!;
+const executionResultEl = document.querySelector<HTMLDivElement>("#execution-result")!;
 const statTilesEl = document.querySelector<HTMLDivElement>("#stat-tiles")!;
 const chartEl = document.querySelector<HTMLDivElement>("#portfolio-chart")!;
 const decisionsTableEl = document.querySelector<HTMLDivElement>("#decisions-table")!;
@@ -67,9 +92,39 @@ const statusLineEl = document.querySelector<HTMLSpanElement>("#status-line")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run-watchlist")!;
 const replayButton = document.querySelector<HTMLButtonElement>("#run-replay")!;
 const squareOffButton = document.querySelector<HTMLButtonElement>("#square-off")!;
+const modeInputs = document.querySelectorAll<HTMLInputElement>('input[name="execution-mode"]');
 
 let decisions: DecisionRow[] = [];
 let selectedDecision: DecisionRow | null = null;
+const executingSymbols = new Set<string>();
+
+function currentExecutionMode(): ExecutionMode {
+  return (Array.from(modeInputs).find((input) => input.checked)?.value as ExecutionMode) ?? "autonomous";
+}
+
+async function pollSuggestions(): Promise<void> {
+  try {
+    const suggestions = await api.suggestions();
+    renderSuggestions(suggestionsPanelEl, suggestions, executeSuggestion, executingSymbols);
+  } catch {
+    // Transient poll failure -- next tick will retry; not worth surfacing.
+  }
+}
+
+async function executeSuggestion(symbol: string): Promise<void> {
+  executingSymbols.add(symbol);
+  await pollSuggestions();
+  try {
+    const result: SuggestionExecuteResult = await api.executeSuggestion(symbol);
+    renderExecutionResult(executionResultEl, { ...result, symbol });
+    await refresh();
+  } catch (error) {
+    statusLineEl.textContent = `Execute failed for ${symbol}: ${(error as Error).message}`;
+  } finally {
+    executingSymbols.delete(symbol);
+    await pollSuggestions();
+  }
+}
 
 function selectDecision(row: DecisionRow): void {
   selectedDecision = row;
@@ -108,6 +163,11 @@ async function init(): Promise<void> {
     return;
   }
   await refresh();
+  await pollSuggestions();
+  // Pending suggestions can outlive the run that created them (they're only
+  // cleared by that symbol's next cycle or an execute click) -- so this
+  // polls continuously, independent of whether a run is currently active.
+  window.setInterval(pollSuggestions, 3_000);
 }
 
 // Both a watchlist cycle and a replay session run for real (real Breeze
@@ -132,6 +192,7 @@ async function runWithProgress(action: () => Promise<unknown>, label: string): P
   }, 1_000);
   const refreshTimer = window.setInterval(() => {
     refresh();
+    pollSuggestions();
   }, 3_000);
 
   try {
@@ -148,13 +209,22 @@ async function runWithProgress(action: () => Promise<unknown>, label: string): P
       renderProgressPanel(progressPanelEl, null);
     }
     await refresh();
+    await pollSuggestions();
     runButton.disabled = false;
     replayButton.disabled = false;
   }
 }
 
-runButton.addEventListener("click", () => runWithProgress(() => api.runWatchlist(), "Running watchlist cycle…"));
-replayButton.addEventListener("click", () => runWithProgress(() => api.runReplay(), "Replaying cached bars…"));
+runButton.addEventListener("click", () => {
+  const mode = currentExecutionMode();
+  runWithProgress(() => api.runWatchlist(mode), `Running watchlist cycle (${mode})…`);
+});
+
+replayButton.addEventListener("click", () => {
+  const mode = currentExecutionMode();
+  const secondsPerTick = mode === "manual" ? MANUAL_REPLAY_SECONDS_PER_TICK : undefined;
+  runWithProgress(() => api.runReplay(20, mode, secondsPerTick), `Replaying cached bars (${mode})…`);
+});
 
 squareOffButton.addEventListener("click", async () => {
   if (!confirm("Force-close every open position right now?")) return;

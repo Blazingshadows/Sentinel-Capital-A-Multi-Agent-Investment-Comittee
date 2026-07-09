@@ -1,5 +1,5 @@
 import { formatCurrency } from "./format";
-import type { DecisionRow, PortfolioState, ReportSummary, SessionProgress, TradeRow } from "./types";
+import type { DecisionRow, PortfolioState, ReportSummary, SessionProgress, Suggestion, SuggestionExecuteResult, TradeRow } from "./types";
 
 const BADGE_CLASS: Record<string, string> = {
   BUY: "buy",
@@ -467,4 +467,105 @@ export function renderTradesTable(container: HTMLElement, trades: TradeRow[]): v
 
   table.appendChild(tbody);
   container.appendChild(table);
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s ago`;
+}
+
+/** Pending manual-mode decisions (GET /suggestions) awaiting an execute
+ * click. Each carries its own live "suggested Ns ago" age -- there's no
+ * fixed timeout (a suggestion is superseded by that symbol's next cycle,
+ * not a clock, see schemas.Suggestion), but the ticking age still gives a
+ * human a sense of how stale the suggested price might be getting. */
+export function renderSuggestions(
+  container: HTMLElement,
+  suggestions: Suggestion[],
+  onExecute: (symbol: string) => void,
+  pendingSymbols: Set<string>,
+): void {
+  container.innerHTML = "";
+
+  if (suggestions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No pending suggestions -- start a manual-mode run to see actionable trades here.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const sorted = [...suggestions].sort((a, b) => new Date(a.suggested_at).getTime() - new Date(b.suggested_at).getTime());
+
+  for (const s of sorted) {
+    const card = document.createElement("div");
+    card.className = "suggestion-card";
+
+    const header = document.createElement("div");
+    header.className = "suggestion-header";
+    const symbolEl = document.createElement("span");
+    symbolEl.className = "suggestion-symbol";
+    symbolEl.textContent = s.symbol;
+    header.appendChild(symbolEl);
+    header.appendChild(badge(s.consensus.decision));
+    const confidenceEl = document.createElement("span");
+    confidenceEl.className = "suggestion-confidence";
+    confidenceEl.textContent = `confidence ${s.consensus.confidence.toFixed(2)}`;
+    header.appendChild(confidenceEl);
+    card.appendChild(header);
+
+    const priceLine = document.createElement("div");
+    priceLine.className = "suggestion-price-line";
+    priceLine.textContent = `Suggested at ${formatCurrency(s.suggested_price)} -- ${timeAgo(s.suggested_at)}`;
+    card.appendChild(priceLine);
+
+    const reasoning = document.createElement("p");
+    reasoning.className = "suggestion-reasoning";
+    reasoning.textContent = s.consensus.reasoning;
+    card.appendChild(reasoning);
+
+    const footer = document.createElement("div");
+    footer.className = "suggestion-footer";
+    const allocationEl = document.createElement("span");
+    allocationEl.textContent = `Approved allocation: ${(s.risk_verdict.approved_allocation * 100).toFixed(1)}% of base capital`;
+    footer.appendChild(allocationEl);
+
+    const executeButton = document.createElement("button");
+    executeButton.className = "suggestion-execute";
+    const isPending = pendingSymbols.has(s.symbol);
+    executeButton.textContent = isPending ? "Executing…" : "Execute";
+    executeButton.disabled = isPending;
+    executeButton.addEventListener("click", () => onExecute(s.symbol));
+    footer.appendChild(executeButton);
+
+    card.appendChild(footer);
+    container.appendChild(card);
+  }
+}
+
+/** Result banner for the most recent manual-mode execution -- makes the
+ * "suggested at X, executing at Y" price movement (or lack of it) visible,
+ * since POST /suggestions/{symbol}/execute intentionally re-fetches a
+ * fresh price rather than replaying the suggested one. */
+export function renderExecutionResult(container: HTMLElement, result: (SuggestionExecuteResult & { symbol: string }) | null): void {
+  container.innerHTML = "";
+  if (!result) {
+    container.classList.add("hidden");
+    return;
+  }
+  container.classList.remove("hidden");
+
+  const priceDelta = result.executing_price - result.suggested_price;
+  const deltaText =
+    priceDelta === 0
+      ? "no price movement"
+      : `${priceDelta > 0 ? "+" : ""}${formatCurrency(priceDelta)} vs suggested`;
+
+  const line = document.createElement("div");
+  line.textContent =
+    `${result.symbol}: suggested at ${formatCurrency(result.suggested_price)} ` +
+    `(${new Date(result.suggested_at).toLocaleTimeString("en-IN")}) -> executed at ${formatCurrency(result.executing_price)} ` +
+    `(${new Date(result.executing_at).toLocaleTimeString("en-IN")}), ${deltaText}.`;
+  container.appendChild(line);
 }
