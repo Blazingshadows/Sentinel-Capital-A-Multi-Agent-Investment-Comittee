@@ -7,6 +7,7 @@ downstream needs to know whether a cycle came from live data or replay.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import pandas as pd
@@ -58,7 +59,14 @@ class ReplayFeed:
 
 
 async def run_replay(session: Session, portfolio: Portfolio, symbol: str, interval: str = "5m",
-                      seconds_per_bar: float = 1.0, max_bars: int | None = None) -> list[DecisionLog]:
+                      seconds_per_bar: float = 1.0, max_bars: int | None = None,
+                      on_bar: Callable[[str, float], None] | None = None) -> list[DecisionLog]:
+    """`on_bar(symbol, price)` fires after every bar, once the trade for that
+    bar has been executed -- lets a multi-symbol caller (run_watchlist_replay)
+    mark the portfolio to market and persist a snapshot as it goes, the same
+    way run_watchlist_once does at the end of a live pass. Without it, replay
+    would write decisions/trades but leave /portfolio/curve empty, since
+    nothing else in this module ever calls insert_portfolio_snapshot."""
     ohlcv = load_cached_ohlcv(symbol, interval=interval)
     try:
         headlines = fetch_headlines(symbol)
@@ -73,9 +81,11 @@ async def run_replay(session: Session, portfolio: Portfolio, symbol: str, interv
     while feed.has_next() and (max_bars is None or bars_played < max_bars):
         context = feed.next_context()
         cycle_ts = pd.Timestamp(context.ohlcv.index[-1]).to_pydatetime()
-        log, _ = process_context(session, portfolio, context, cycle_ts=cycle_ts)
+        log, price = process_context(session, portfolio, context, cycle_ts=cycle_ts)
         logs.append(log)
         bars_played += 1
+        if on_bar:
+            on_bar(symbol, price)
         if seconds_per_bar:
             await asyncio.sleep(seconds_per_bar)
 
@@ -89,11 +99,24 @@ async def run_watchlist_replay(session: Session, portfolio: Portfolio, watchlist
     hours doesn't depend on Breeze being reachable -- as long as each symbol
     already has a cache file from an earlier live pull. One symbol's cache
     being missing/corrupt shouldn't blank the rest of the demo, so failures
-    are isolated per symbol (same pattern as run_watchlist_once)."""
+    are isolated per symbol (same pattern as run_watchlist_once). Snapshots
+    the portfolio after every bar (not just at the end) so the dashboard's
+    value-over-time chart has something to plot instead of one flat point."""
+    from backend.committee.persistence import repository
+
     logs: list[DecisionLog] = []
+    latest_prices: dict[str, float] = {}
+
+    def snapshot(bar_symbol: str, price: float) -> None:
+        latest_prices[bar_symbol] = price
+        repository.insert_portfolio_snapshot(session, portfolio.mark_to_market(latest_prices))
+
     for symbol in watchlist:
         try:
-            logs.extend(await run_replay(session, portfolio, symbol, interval=interval, seconds_per_bar=0, max_bars=max_bars))
+            logs.extend(
+                await run_replay(session, portfolio, symbol, interval=interval, seconds_per_bar=0,
+                                  max_bars=max_bars, on_bar=snapshot)
+            )
         except Exception:
             logger.exception("Replay failed for %s — skipping.", symbol)
             continue
