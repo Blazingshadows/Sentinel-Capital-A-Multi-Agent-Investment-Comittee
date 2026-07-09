@@ -114,14 +114,29 @@ runButton.addEventListener("click", async () => {
 
 replayButton.addEventListener("click", async () => {
   replayButton.disabled = true;
-  statusLineEl.textContent = "Replaying cached bars…";
+  const startedAt = Date.now();
+  const tick = () => {
+    const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+    statusLineEl.textContent = `Replaying cached bars… (${elapsedSec}s -- runs real LLM calls per bar, this takes a few minutes)`;
+  };
+  tick();
+  // Every symbol's bars run sequentially server-side (real LLM calls, no
+  // batching) -- a full watchlist replay takes minutes, not seconds. Without
+  // this, the dashboard shows nothing until the whole POST resolves and
+  // looks stuck/broken even though it's working; polling refresh() every few
+  // seconds surfaces each decision/trade/snapshot as soon as it's written.
+  const pollTimer = window.setInterval(() => {
+    tick();
+    refresh();
+  }, 4_000);
   try {
     await api.runReplay();
-    await refresh();
     statusLineEl.textContent = `Replay complete: ${new Date().toLocaleTimeString("en-IN")}`;
   } catch (error) {
     statusLineEl.textContent = `Replay failed: ${(error as Error).message}`;
   } finally {
+    window.clearInterval(pollTimer);
+    await refresh();
     replayButton.disabled = false;
   }
 });
