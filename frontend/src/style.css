@@ -318,3 +318,30 @@ tbody tr.selected {
   color: var(--text-muted);
   font-size: 11px;
 }
+
+.progress-log {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.progress-log-line {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.progress-log-line:last-child {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.progress-log-line.error {
+  color: var(--status-critical);
+  font-weight: 600;
+}

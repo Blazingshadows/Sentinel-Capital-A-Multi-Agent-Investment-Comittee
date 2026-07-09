@@ -13,6 +13,7 @@ through — Replay Mode is just an alternate way of producing a
 """
 
 from datetime import datetime, timezone
+from typing import Callable
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -39,22 +40,37 @@ def _latest_bar_direction(ohlcv: pd.DataFrame) -> int:
     return 1 if diff > 0 else (-1 if diff < 0 else 0)
 
 
-def evaluate_context(session: Session, context: MarketContext, cycle_ts: datetime) -> tuple[ConsensusDecision, RiskVerdict, list[AgentOutput]]:
+def evaluate_context(
+    session: Session,
+    context: MarketContext,
+    cycle_ts: datetime,
+    on_progress: Callable[[str], None] | None = None,
+) -> tuple[ConsensusDecision, RiskVerdict, list[AgentOutput]]:
     """Agents through Risk — no capital committed, no trade executed yet."""
+    progress = on_progress or (lambda _msg: None)
+    symbol = context.symbol
+
     actual_direction = _latest_bar_direction(context.ohlcv)
-    repository.backfill_prediction_outcomes(session, context.symbol, before=cycle_ts, actual_direction=actual_direction)
+    repository.backfill_prediction_outcomes(session, symbol, before=cycle_ts, actual_direction=actual_direction)
     refresh_trust_scores(session, list(BASE_EXPERTISE))
 
-    original_recommendations = [
-        technical.analyze(context),
-        news_sentiment.analyze(context),
-        macro.analyze(context),
-        forecasting.analyze(context),
-    ]
+    progress(f"{symbol}: Technical agent analyzing price action")
+    technical_out = technical.analyze(context)
+    progress(f"{symbol}: News & Sentiment agent reading coverage")
+    news_out = news_sentiment.analyze(context)
+    progress(f"{symbol}: Macro agent assessing conditions")
+    macro_out = macro.analyze(context)
+    progress(f"{symbol}: Forecasting agent projecting move")
+    forecasting_out = forecasting.analyze(context)
+    original_recommendations = [technical_out, news_out, macro_out, forecasting_out]
 
+    progress(f"{symbol}: Contrarian agent challenging the room in debate")
     debate = run_debate(context, original_recommendations)
-    consensus = run_consensus(session, context.symbol, debate, context.context_flags)
+    progress(f"{symbol}: building consensus")
+    consensus = run_consensus(session, symbol, debate, context.context_flags)
+    progress(f"{symbol}: Risk Manager reviewing verdict")
     risk_verdict = risk_manager.evaluate(context, consensus)
+    progress(f"{symbol}: evaluation complete — consensus {consensus.decision.value}, risk {risk_verdict.action.value}")
 
     return consensus, risk_verdict, debate.revised_recommendations
 

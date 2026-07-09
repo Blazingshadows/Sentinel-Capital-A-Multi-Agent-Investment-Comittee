@@ -5,10 +5,15 @@ the dashboard UI itself is out of scope for this pass; this is what it would
 consume.
 """
 
+import asyncio
+import json
+import queue
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
 from backend.committee.config import BUYING_POWER, CAPITAL
@@ -114,6 +119,51 @@ def trigger_watchlist(request: Request) -> list[dict]:
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()
+
+
+@app.post("/watchlist/run/stream")
+async def trigger_watchlist_stream(request: Request) -> StreamingResponse:
+    """Same watchlist pass as `/watchlist/run`, but streams newline-delimited
+    JSON progress events (one per symbol/agent step) as the run happens,
+    instead of blocking silently until the whole pass finishes."""
+    session = request.app.state.session_factory()
+    portfolio = request.app.state.portfolio
+    progress_queue: queue.Queue[str | None] = queue.Queue()
+    outcome: dict[str, object] = {}
+
+    def on_progress(message: str) -> None:
+        progress_queue.put(message)
+
+    def worker() -> None:
+        try:
+            logs = run_watchlist_once(session, portfolio, on_progress=on_progress)
+            outcome["logs"] = logs
+        except Exception as exc:
+            outcome["error"] = str(exc)
+        finally:
+            progress_queue.put(None)
+
+    async def event_stream():
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        loop = asyncio.get_event_loop()
+        try:
+            while True:
+                message = await loop.run_in_executor(None, progress_queue.get)
+                if message is None:
+                    break
+                yield json.dumps({"type": "progress", "message": message}) + "\n"
+
+            if "error" in outcome:
+                yield json.dumps({"type": "error", "message": outcome["error"]}) + "\n"
+            else:
+                logs = outcome.get("logs", [])
+                decisions = [log.model_dump(mode="json") for log in logs]
+                yield json.dumps({"type": "done", "decisions": decisions}) + "\n"
+        finally:
+            session.close()
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 @app.get("/decisions")

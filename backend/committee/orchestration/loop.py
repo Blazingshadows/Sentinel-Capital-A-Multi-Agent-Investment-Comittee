@@ -11,6 +11,7 @@ once all of them have a fresh price for this pass).
 import asyncio
 import logging
 from datetime import datetime, time, timezone
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -36,23 +37,31 @@ def is_market_hours(now: datetime | None = None) -> bool:
 
 
 def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
-                        context_flags: list[str] | None = None) -> list[DecisionLog]:
+                        context_flags: list[str] | None = None,
+                        on_progress: Callable[[str], None] | None = None) -> list[DecisionLog]:
+    progress = on_progress or (lambda _msg: None)
     cycle_ts = datetime.now(timezone.utc)
     evaluations = []
+    total = len(watchlist)
 
-    for symbol in watchlist:
+    progress(f"Starting watchlist run — {total} symbols")
+
+    for i, symbol in enumerate(watchlist, start=1):
+        progress(f"[{i}/{total}] {symbol}: fetching market data")
         try:
             context = build_context(symbol, context_flags=context_flags)
-            consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts)
+            consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts, on_progress=progress)
             evaluations.append((context, consensus, risk_verdict, revised_recommendations))
         except Exception:
             logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
+            progress(f"[{i}/{total}] {symbol}: evaluation failed — skipping")
             continue
 
     candidates = [
         AllocationCandidate(symbol=context.symbol, price=context.latest_price, consensus=consensus, risk_verdict=risk_verdict)
         for context, consensus, risk_verdict, _ in evaluations
     ]
+    progress(f"Allocating capital across {len(candidates)} candidates")
     adjusted_verdicts = allocate_capital(candidates, portfolio)
 
     logs: list[DecisionLog] = []
@@ -60,18 +69,22 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
 
     for context, consensus, risk_verdict, revised_recommendations in evaluations:
         final_verdict = adjusted_verdicts.get(context.symbol, risk_verdict)
+        progress(f"{context.symbol}: executing trade")
         try:
             log = finalize_cycle(session, portfolio, context, consensus, final_verdict, revised_recommendations, cycle_ts)
         except Exception:
             logger.exception("Execution failed for %s — skipping this stock this pass.", context.symbol)
+            progress(f"{context.symbol}: execution failed — skipping")
             continue
         logs.append(log)
         latest_prices[context.symbol] = context.latest_price
+        progress(f"{context.symbol}: done — {log.trade.action.value}")
 
     if latest_prices:
         snapshot = portfolio.mark_to_market(latest_prices)
         repository.insert_portfolio_snapshot(session, snapshot)
 
+    progress(f"Watchlist run complete — {len(logs)} decisions")
     return logs
 
 
