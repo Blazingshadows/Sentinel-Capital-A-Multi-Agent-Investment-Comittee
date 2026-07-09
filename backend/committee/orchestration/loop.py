@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from backend.committee.config import (
     SESSION_SQUARE_OFF,
     SESSION_START,
+    STOP_LOSS_PCT,
     SWITCH_CONFIDENCE_MARGIN,
     SWITCH_MIN_CONFIDENCE,
     WATCHLIST,
@@ -48,6 +49,47 @@ def is_market_hours(now: datetime | None = None) -> bool:
     start = time.fromisoformat(SESSION_START)
     end = time.fromisoformat(SESSION_SQUARE_OFF)
     return start <= now.time() <= end
+
+
+def _apply_stop_loss(evaluations: list[tuple], portfolio: Portfolio) -> list[tuple]:
+    """Forces an exit when a held position's unrealized move against its
+    cost basis breaches STOP_LOSS_PCT -- independent of, and prior to, the
+    committee's own directional view for this cycle. Runs before cross-
+    symbol comparison so a stop-loss breach is always a hard exit (BUY/SELL
+    with 0 allocation, same target-zero mechanism as square-off), never
+    left as a HOLD/WAIT that comparison could instead turn into a SWITCH."""
+    updated = []
+    for context, consensus, risk_verdict, revised in evaluations:
+        qty = portfolio.positions.get(context.symbol, 0.0)
+        entry_price = portfolio.entry_prices.get(context.symbol)
+        if qty != 0 and entry_price:
+            price = context.latest_price
+            unrealized_pct = (price - entry_price) / entry_price * (1 if qty > 0 else -1)
+            if unrealized_pct <= -STOP_LOSS_PCT:
+                closing_decision = Decision.SELL if qty > 0 else Decision.BUY
+                consensus = consensus.model_copy(
+                    update={
+                        "decision": closing_decision,
+                        "confidence": 1.0,
+                        "allocation": 0.0,
+                        "reasoning": (
+                            f"STOP-LOSS: {context.symbol} down {unrealized_pct:+.1%} vs cost basis "
+                            f"{entry_price:.2f} (current {price:.2f}), breaching the -{STOP_LOSS_PCT:.0%} "
+                            f"threshold -- forced exit overrides this cycle's consensus. "
+                            f"Original reasoning: {consensus.reasoning}"
+                        ),
+                    }
+                )
+                risk_verdict = RiskVerdict(
+                    action=RiskAction.APPROVE,
+                    approved_allocation=0.0,
+                    volatility_estimate=risk_verdict.volatility_estimate,
+                    reason="Stop-loss triggered — forced exit, always approved regardless of volatility.",
+                    expected_return=risk_verdict.expected_return,
+                    expected_drawdown=risk_verdict.expected_drawdown,
+                )
+        updated.append((context, consensus, risk_verdict, revised))
+    return updated
 
 
 def _apply_cross_symbol_comparison(evaluations: list[tuple], portfolio: Portfolio) -> list[tuple]:
@@ -121,6 +163,7 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
             logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
             continue
 
+    evaluations = _apply_stop_loss(evaluations, portfolio)
     evaluations = _apply_cross_symbol_comparison(evaluations, portfolio)
 
     candidates = [

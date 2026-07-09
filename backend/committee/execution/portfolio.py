@@ -15,6 +15,13 @@ from backend.committee.schemas import ConsensusDecision, Decision, PortfolioSnap
 class Portfolio:
     cash: float = CAPITAL
     positions: dict[str, float] = field(default_factory=dict)  # symbol -> signed qty
+    entry_prices: dict[str, float] = field(default_factory=dict)  # symbol -> cost basis of the current position
+    # In-memory only, not persisted/restored across a process restart (the
+    # Dynamic Trust Framework's other position state, portfolio_snapshots,
+    # only stores cash/positions/value) -- a stop-loss simply won't fire for
+    # a position carried across a restart until it's re-opened. Acceptable
+    # for a single-session demo; would need its own persisted column to
+    # survive restarts.
 
     def mark_to_market(self, prices: dict[str, float]) -> PortfolioSnapshot:
         position_value = sum(qty * prices.get(symbol, 0.0) for symbol, qty in self.positions.items())
@@ -26,6 +33,23 @@ class Portfolio:
             portfolio_value=portfolio_value,
             net_pnl=portfolio_value - CAPITAL,
         )
+
+
+def _update_entry_price(portfolio: Portfolio, symbol: str, current_qty: float, new_qty: float, delta_qty: float, price: float) -> None:
+    """Cost basis for the stop-loss check. Closed to flat -> no position to
+    track. Opened fresh or flipped direction (long to short or back) -> cost
+    basis is just this fill's price, since there's no prior same-direction
+    position to average against. Added to an existing same-direction
+    position -> quantity-weighted average of old and new cost. Reduced
+    (without flattening or flipping) -> cost basis of the remaining shares
+    is unchanged, nothing to do."""
+    if new_qty == 0:
+        portfolio.entry_prices.pop(symbol, None)
+    elif current_qty == 0 or (current_qty > 0) != (new_qty > 0):
+        portfolio.entry_prices[symbol] = price
+    elif abs(new_qty) > abs(current_qty):
+        old_price = portfolio.entry_prices.get(symbol, price)
+        portfolio.entry_prices[symbol] = (abs(current_qty) * old_price + abs(delta_qty) * price) / abs(new_qty)
 
 
 def execute(portfolio: Portfolio, consensus: ConsensusDecision, risk_verdict: RiskVerdict, price: float) -> TradeRecord:
@@ -62,7 +86,9 @@ def execute(portfolio: Portfolio, consensus: ConsensusDecision, risk_verdict: Ri
     net_cash_flow, cost_breakdown = apply_costs(trade_action, trade_qty, price)
 
     portfolio.cash += net_cash_flow
-    portfolio.positions[consensus.symbol] = current_qty + delta_qty
+    new_qty = current_qty + delta_qty
+    portfolio.positions[consensus.symbol] = new_qty
+    _update_entry_price(portfolio, consensus.symbol, current_qty, new_qty, delta_qty, price)
 
     return TradeRecord(
         symbol=consensus.symbol,

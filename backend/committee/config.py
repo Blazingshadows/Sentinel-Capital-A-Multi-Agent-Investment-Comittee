@@ -140,6 +140,14 @@ VOLATILITY_TRIM_FACTOR = 0.5
 INTRADAY_BARS_PER_DAY = 75  # NSE 9:15-15:30 session / 5-min bars
 TRADING_DAYS_PER_YEAR = 252
 
+# Hard stop-loss: a held position whose unrealized move against its cost
+# basis breaches this fraction is force-closed next cycle regardless of what
+# the committee's directional view says -- independent of, and a hard floor
+# under, the volatility-based sizing above. The business briefing this
+# project shipped named the lack of exactly this control as the main risk
+# gap before live capital.
+STOP_LOSS_PCT = 0.03
+
 # Expected Risk & Return (PS-mandated per-trade output) -- a heuristic
 # projection from GARCH-estimated annualized volatility and consensus
 # confidence, not a backtested or historically-calibrated figure. De-
