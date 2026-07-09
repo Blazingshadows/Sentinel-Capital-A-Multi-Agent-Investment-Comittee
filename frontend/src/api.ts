@@ -23,4 +23,5 @@ export const api = {
   report: () => getJson<ReportSummary>("/report"),
   runCycle: (symbol: string) => postJson<{ decision: DecisionRow; price: number }>(`/cycle/${symbol}`),
   runWatchlist: () => postJson<DecisionRow[]>("/watchlist/run"),
+  squareOff: () => postJson<unknown[]>("/session/square-off"),
 };

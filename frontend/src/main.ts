@@ -14,6 +14,7 @@ app.innerHTML = `
     <div class="controls">
       <span class="status-line" id="status-line"></span>
       <button id="run-watchlist">Run watchlist cycle</button>
+      <button id="square-off" title="Force-closes every open position right now, same as the automatic end-of-day close">Square off all</button>
     </div>
   </header>
 
@@ -53,6 +54,7 @@ const cashLedgerEl = document.querySelector<HTMLDivElement>("#cash-ledger")!;
 const tradesTableEl = document.querySelector<HTMLDivElement>("#trades-table")!;
 const statusLineEl = document.querySelector<HTMLSpanElement>("#status-line")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run-watchlist")!;
+const squareOffButton = document.querySelector<HTMLButtonElement>("#square-off")!;
 
 let decisions: DecisionRow[] = [];
 let selectedDecision: DecisionRow | null = null;
@@ -107,6 +109,21 @@ runButton.addEventListener("click", async () => {
     statusLineEl.textContent = `Run failed: ${(error as Error).message}`;
   } finally {
     runButton.disabled = false;
+  }
+});
+
+squareOffButton.addEventListener("click", async () => {
+  if (!confirm("Force-close every open position right now?")) return;
+  squareOffButton.disabled = true;
+  statusLineEl.textContent = "Squaring off all positions…";
+  try {
+    await api.squareOff();
+    await refresh();
+    statusLineEl.textContent = `Square-off complete: ${new Date().toLocaleTimeString("en-IN")}`;
+  } catch (error) {
+    statusLineEl.textContent = `Square-off failed: ${(error as Error).message}`;
+  } finally {
+    squareOffButton.disabled = false;
   }
 });
 

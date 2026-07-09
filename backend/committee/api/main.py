@@ -14,7 +14,7 @@ from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_p
 from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.orchestration.cycle import run_cycle
-from backend.committee.orchestration.loop import run_watchlist_once
+from backend.committee.orchestration.loop import run_watchlist_once, square_off_all_positions
 from backend.committee.persistence import repository
 from backend.committee.persistence.db import init_db, make_engine, make_session_factory
 
@@ -128,6 +128,20 @@ def trigger_watchlist(request: Request) -> list[dict]:
     session = request.app.state.session_factory()
     try:
         logs = run_watchlist_once(session, request.app.state.portfolio)
+        return [log.model_dump(mode="json") for log in logs]
+    finally:
+        session.close()
+
+
+@app.post("/session/square-off")
+def trigger_square_off(request: Request) -> list[dict]:
+    """Manually forces every open position flat right now -- the same
+    action that fires automatically when the session crosses market close.
+    Exists so this control is demoable without waiting for the actual
+    15:15 IST boundary."""
+    session = request.app.state.session_factory()
+    try:
+        logs = square_off_all_positions(session, request.app.state.portfolio)
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()

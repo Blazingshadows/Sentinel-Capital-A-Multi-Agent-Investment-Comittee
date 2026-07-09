@@ -42,9 +42,12 @@ def execute(portfolio: Portfolio, consensus: ConsensusDecision, risk_verdict: Ri
 
     if consensus.decision == Decision.SWITCH:
         target_qty = 0.0  # fully exit -- the alternative symbol gets its own BUY this same cycle
-    elif consensus.decision in (Decision.WAIT, Decision.HOLD) or risk_verdict.action == RiskAction.REJECT or risk_verdict.approved_allocation <= 0:
+    elif consensus.decision in (Decision.WAIT, Decision.HOLD) or risk_verdict.action == RiskAction.REJECT:
         target_qty = current_qty  # WAIT/HOLD/REJECT means hold whatever's already there, not liquidate it
     else:
+        # A BUY/SELL with 0 approved_allocation (e.g. a forced square-off
+        # closing trade) is not "no change" -- target_notional correctly
+        # comes out to 0 either way, same formula, no special-casing needed.
         direction = 1 if consensus.decision == Decision.BUY else -1
         target_notional = direction * risk_verdict.approved_allocation * BUYING_POWER
         target_qty = round(target_notional / price)
