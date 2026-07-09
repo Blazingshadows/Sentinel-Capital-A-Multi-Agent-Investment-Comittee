@@ -23,5 +23,6 @@ export const api = {
   report: () => getJson<ReportSummary>("/report"),
   runCycle: (symbol: string) => postJson<{ decision: DecisionRow; price: number }>(`/cycle/${symbol}`),
   runWatchlist: () => postJson<DecisionRow[]>("/watchlist/run"),
+  runReplay: (maxBars = 20) => postJson<{ status: string; max_bars: number }>(`/replay/run?max_bars=${maxBars}`),
   squareOff: () => postJson<unknown[]>("/session/square-off"),
 };

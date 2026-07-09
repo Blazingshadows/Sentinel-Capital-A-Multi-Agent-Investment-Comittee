@@ -10,6 +10,7 @@ once all of them have a fresh price for this pass).
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
@@ -24,7 +25,7 @@ from backend.committee.config import (
     WATCHLIST,
 )
 from backend.committee.execution.portfolio import Portfolio
-from backend.committee.market_data.context import build_context
+from backend.committee.market_data.context import MarketContext, build_context
 from backend.committee.orchestration.allocator import AllocationCandidate, allocate_capital
 from backend.committee.orchestration.cycle import evaluate_context, finalize_cycle
 from backend.committee.persistence import repository
@@ -149,13 +150,21 @@ def _apply_cross_symbol_comparison(evaluations: list[tuple], portfolio: Portfoli
 
 
 def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
-                        context_flags: list[str] | None = None) -> list[DecisionLog]:
+                        context_flags: list[str] | None = None,
+                        context_provider: Callable[[str], MarketContext] | None = None) -> list[DecisionLog]:
+    """`context_provider(symbol) -> MarketContext` overrides the default live
+    Breeze fetch -- Replay Mode's only hook into this function, so a replay
+    pass runs through the *exact* same allocator/stop-loss/cross-symbol-
+    comparison path a live pass does instead of a parallel implementation
+    that could silently drift out of sync with it (or reintroduce the
+    allocator-bypass bug an earlier, simpler Replay Mode had)."""
     cycle_ts = datetime.now(timezone.utc)
+    fetch_context = context_provider or (lambda symbol: build_context(symbol, context_flags=context_flags))
     evaluations = []
 
     for symbol in watchlist:
         try:
-            context = build_context(symbol, context_flags=context_flags)
+            context = fetch_context(symbol)
             current_position = portfolio.positions.get(symbol, 0.0)
             consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts, current_position)
             evaluations.append((context, consensus, risk_verdict, revised_recommendations))

@@ -6,17 +6,22 @@ downstream needs to know whether a cycle came from live data or replay.
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from backend.committee.config import INTRADAY_BARS_PER_DAY, WATCHLIST
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.market_data.context import MarketContext, fetch_fundamentals
 from backend.committee.market_data.news import fetch_headlines
 from backend.committee.market_data.prices import cache_path, fetch_ohlcv
 from backend.committee.orchestration.cycle import process_context
+from backend.committee.orchestration.loop import run_watchlist_once
 from backend.committee.schemas import DecisionLog
+
+logger = logging.getLogger(__name__)
 
 
 def load_cached_ohlcv(symbol: str, interval: str = "5m", period: str = "60d") -> pd.DataFrame:
@@ -55,6 +60,16 @@ class ReplayFeed:
 
 async def run_replay(session: Session, portfolio: Portfolio, symbol: str, interval: str = "5m",
                       seconds_per_bar: float = 1.0, max_bars: int | None = None) -> list[DecisionLog]:
+    """Single-symbol replay -- bypasses the cross-symbol allocator entirely
+    (there's only ever one symbol in play), so this is a reasonable tool for
+    inspecting one stock's behavior in isolation, but NOT a substitute for
+    `run_replay_session` below when demoing the full committee: an earlier
+    version of watchlist-wide replay called this per symbol in a loop, which
+    let positions size against the full BUYING_POWER as if each symbol had
+    exclusive claim to it -- the same bug the live cross-symbol allocator
+    exists to prevent, just reintroduced on the replay path. Kept here for
+    single-symbol inspection only; see run_replay_session for anything that
+    touches the shared portfolio across multiple symbols."""
     ohlcv = load_cached_ohlcv(symbol, interval=interval)
     try:
         headlines = fetch_headlines(symbol)
@@ -76,3 +91,53 @@ async def run_replay(session: Session, portfolio: Portfolio, symbol: str, interv
             await asyncio.sleep(seconds_per_bar)
 
     return logs
+
+
+def _build_feed(symbol: str, interval: str) -> ReplayFeed:
+    ohlcv = load_cached_ohlcv(symbol, interval=interval)
+    try:
+        headlines = fetch_headlines(symbol)
+    except Exception:
+        headlines = []
+    fundamentals, sector = fetch_fundamentals(symbol)
+    return ReplayFeed(symbol=symbol, ohlcv=ohlcv, headlines=headlines, fundamentals=fundamentals, sector=sector)
+
+
+async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
+                              interval: str = "5m", max_bars: int = INTRADAY_BARS_PER_DAY,
+                              seconds_per_tick: float = 5.0) -> None:
+    """Demo entrypoint for outside market hours: one `ReplayFeed` per
+    watchlist symbol, advanced in lockstep -- every tick pulls the next
+    cached bar for *every* symbol at once and runs them through
+    `run_watchlist_once` exactly as a live cycle would, so the cross-symbol
+    allocator, stop-loss, and Alternative-Stocks/SWITCH comparison all see
+    the same one-cycle-many-symbols view they do live, not a per-symbol
+    replay bypassing them. Runs until `max_bars` ticks, the earliest-
+    exhausted symbol's cache runs out, or the caller's asyncio Task is
+    cancelled -- mirrors `run_session`'s cancellation contract exactly, so
+    the API layer can start/stop it the same way."""
+    feeds: dict[str, ReplayFeed] = {}
+    for symbol in watchlist:
+        try:
+            feeds[symbol] = _build_feed(symbol, interval)
+        except Exception:
+            logger.exception("Replay feed setup failed for %s -- excluded from this replay session.", symbol)
+
+    active_watchlist = [symbol for symbol in watchlist if symbol in feeds]
+    if not active_watchlist:
+        logger.error("No symbols had usable cached data -- replay session has nothing to play.")
+        return
+
+    bars_played = 0
+    while bars_played < max_bars and all(feeds[symbol].has_next() for symbol in active_watchlist):
+        contexts_this_tick = {symbol: feeds[symbol].next_context() for symbol in active_watchlist}
+        session = session_factory()
+        try:
+            run_watchlist_once(session, portfolio, active_watchlist, context_provider=lambda s: contexts_this_tick[s])
+        except Exception:
+            logger.exception("Replay tick failed.")
+        finally:
+            session.close()
+        bars_played += 1
+        if seconds_per_tick:
+            await asyncio.sleep(seconds_per_tick)

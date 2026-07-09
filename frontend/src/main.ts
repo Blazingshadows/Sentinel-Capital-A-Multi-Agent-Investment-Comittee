@@ -14,6 +14,7 @@ app.innerHTML = `
     <div class="controls">
       <span class="status-line" id="status-line"></span>
       <button id="run-watchlist">Run watchlist cycle</button>
+      <button id="run-replay" title="Plays cached historical bars through the exact same pipeline -- for demos outside market hours">Run demo (replay)</button>
       <button id="square-off" title="Force-closes every open position right now, same as the automatic end-of-day close">Square off all</button>
     </div>
   </header>
@@ -54,6 +55,7 @@ const cashLedgerEl = document.querySelector<HTMLDivElement>("#cash-ledger")!;
 const tradesTableEl = document.querySelector<HTMLDivElement>("#trades-table")!;
 const statusLineEl = document.querySelector<HTMLSpanElement>("#status-line")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run-watchlist")!;
+const replayButton = document.querySelector<HTMLButtonElement>("#run-replay")!;
 const squareOffButton = document.querySelector<HTMLButtonElement>("#square-off")!;
 
 let decisions: DecisionRow[] = [];
@@ -109,6 +111,34 @@ runButton.addEventListener("click", async () => {
     statusLineEl.textContent = `Run failed: ${(error as Error).message}`;
   } finally {
     runButton.disabled = false;
+  }
+});
+
+replayButton.addEventListener("click", async () => {
+  replayButton.disabled = true;
+  const startedAt = Date.now();
+  const tick = () => {
+    const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+    statusLineEl.textContent = `Replaying cached bars… (${elapsedSec}s -- runs real LLM calls per bar, this takes a while)`;
+  };
+  tick();
+  // Every symbol's bars run through the real pipeline (real LLM calls, no
+  // batching) -- a replay run takes minutes, not seconds. Poll refresh()
+  // periodically so decisions/trades/snapshots appear as they're written
+  // instead of the dashboard looking stuck for the whole run.
+  const pollTimer = window.setInterval(() => {
+    tick();
+    refresh();
+  }, 4_000);
+  try {
+    await api.runReplay();
+    statusLineEl.textContent = `Replay complete: ${new Date().toLocaleTimeString("en-IN")}`;
+  } catch (error) {
+    statusLineEl.textContent = `Replay failed: ${(error as Error).message}`;
+  } finally {
+    window.clearInterval(pollTimer);
+    await refresh();
+    replayButton.disabled = false;
   }
 });
 

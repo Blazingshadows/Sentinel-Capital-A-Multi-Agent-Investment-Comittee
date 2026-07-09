@@ -17,6 +17,7 @@ from backend.committee.orchestration.cycle import run_cycle
 from backend.committee.orchestration.loop import run_watchlist_once, square_off_all_positions
 from backend.committee.persistence import repository
 from backend.committee.persistence.db import init_db, make_engine, make_session_factory
+from backend.committee.replay.player import run_replay_session
 
 
 @asynccontextmanager
@@ -145,6 +146,24 @@ def trigger_square_off(request: Request) -> list[dict]:
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()
+
+
+@app.post("/replay/run")
+async def trigger_replay(request: Request, max_bars: int = 20, seconds_per_tick: float = 0.0) -> dict:
+    """Demo mode for outside market hours: plays cached historical bars for
+    the whole watchlist in lockstep through run_watchlist_once -- the exact
+    same allocator/stop-loss/cross-symbol-comparison path live trading uses,
+    not a parallel implementation (an earlier version of this endpoint
+    called the single-symbol replay path per symbol in a loop, bypassing
+    the cross-symbol allocator and driving the book to a simulated -204%;
+    see replay/player.py's module docstring)."""
+    await run_replay_session(
+        request.app.state.session_factory,
+        request.app.state.portfolio,
+        max_bars=max_bars,
+        seconds_per_tick=seconds_per_tick,
+    )
+    return {"status": "complete", "max_bars": max_bars}
 
 
 @app.post("/discovery/run")
