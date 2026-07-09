@@ -1,7 +1,8 @@
 """Consensus Orchestrator — README's synthesis stage. Pure Python math, no
 LLM call: fuses the Debate Layer's revised recommendations into one
 allocation recommendation via the Dynamic Trust Framework's
-`Agent Influence = Confidence x Trust x Context Relevance`.
+`Agent Influence = Confidence x Trust x Expertise x Context Relevance x
+Agreement`.
 """
 
 from sqlalchemy.orm import Session
@@ -51,11 +52,17 @@ def run_consensus(
 def _build_reasoning(dcs: float, decision: Decision, influences, debate: DebateResult) -> str:
     ranked = sorted(influences, key=lambda inf: inf.influence_normalized, reverse=True)
     votes = "; ".join(
-        f"{inf.agent} (weight={inf.influence_normalized:.2f}, vote={inf.signed_vote:+.2f}, trust={inf.trust_score:.2f})"
+        f"{inf.agent} (weight={inf.influence_normalized:.2f}, vote={inf.signed_vote:+.2f}, "
+        f"trust={inf.trust_score:.2f}, expertise={inf.expertise:.2f}, "
+        f"context={inf.context_relevance:.2f}, agreement={inf.agreement_factor:.2f})"
         for inf in ranked
     )
     return (
         f"Directional Confidence Score={dcs:+.2f} -> {decision.value}. "
+        f"Not a simple vote average: each agent's weight is its own confidence multiplied by four "
+        f"independently-tracked factors -- historical trust, domain expertise, today's context "
+        f"relevance, and this-cycle agreement/disagreement with the rest of the committee -- so two "
+        f"agents at the same confidence can carry very different influence. "
         f"Weighted committee votes: {votes}. "
         f"Contrarian challenge considered: {debate.contrarian_challenge}"
     )

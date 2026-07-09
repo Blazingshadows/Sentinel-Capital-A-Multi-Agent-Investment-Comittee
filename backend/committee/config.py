@@ -82,10 +82,20 @@ WATCHLIST_FUNDAMENTALS = {
 }
 
 # --- Consensus Orchestrator (README "Dynamic Trust Framework") -------------
-# Agent Influence = Confidence x Trust x Context Relevance
+# Agent Influence = Confidence x Trust x Expertise x Context Relevance x Agreement
 DECISION_THRESHOLD_WAIT = 0.15  # |weighted signal| below this -> WAIT
 TRUST_PRIOR = 0.5  # Laplace-smoothed starting trust before any history
 TRUST_SMOOTHING = 2.0  # Laplace smoothing constant (pseudo-observations)
+
+# How much this-cycle disagreement with the rest of the committee can boost
+# an agent's influence, as a fraction: 0.3 means the agreement factor is
+# bounded to [1.0, 1.3]. Boost-only -- an agent who diverges from the room
+# while carrying above-prior trust is boosted (informative dissent, not just
+# contrarianism for its own sake); full agreement is left neutral (1.0)
+# rather than discounted, see trust/scoring.agreement_factor's docstring for
+# why a discount would perversely penalize the most reliable agreeing
+# agents most whenever the committee genuinely agrees.
+AGREEMENT_SENSITIVITY = 0.3
 
 # Static base expertise per agent for short-horizon intraday calls; multiplied
 # by context_relevance (below) so "how good this agent generally is" and "how

@@ -105,14 +105,20 @@ class DebateResult(BaseModel):
 
 
 class AgentInfluence(BaseModel):
-    """Every factor behind one agent's weight this cycle — the Dynamic Trust
-    Framework's `Agent Influence = Confidence x Trust x Context Relevance`,
-    logged so the committee stays explainable rather than a black box."""
+    """Every factor behind one agent's weight this cycle -- the Dynamic Trust
+    Framework's `Agent Influence = Confidence x Trust x Expertise x Context
+    Relevance x Agreement`, logged so the committee stays explainable rather
+    than a black box. `trust_score` is historical reliability itself
+    (Laplace-smoothed resolved-prediction hit rate); `agreement_factor` is
+    this agent's this-cycle divergence from the rest of the committee,
+    discounted when redundant and boosted when it's trust-backed dissent."""
 
     agent: str
     confidence: float
     trust_score: float
+    expertise: float
     context_relevance: float
+    agreement_factor: float
     influence_raw: float
     influence_normalized: float
     signed_vote: float
