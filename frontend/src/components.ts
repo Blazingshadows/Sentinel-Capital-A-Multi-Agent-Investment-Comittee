@@ -1,10 +1,17 @@
 import { formatCurrency } from "./format";
 import type { DecisionRow, PortfolioState, ReportSummary, TradeRow } from "./types";
 
+const BADGE_CLASS: Record<string, string> = {
+  BUY: "buy",
+  SELL: "sell",
+  HOLD: "hold",
+  WAIT: "wait",
+  SWITCH: "switch",
+};
+
 function badge(decision: string): HTMLElement {
   const span = document.createElement("span");
-  const cls = decision === "BUY" ? "buy" : decision === "SELL" ? "sell" : "wait";
-  span.className = `badge ${cls}`;
+  span.className = `badge ${BADGE_CLASS[decision] ?? "wait"}`;
   span.textContent = decision;
   return span;
 }
@@ -188,6 +195,47 @@ export function renderDecisionDetail(container: HTMLElement, row: DecisionRow | 
   risk.appendChild(riskLabel);
   risk.appendChild(document.createTextNode(row.risk_reason));
   container.appendChild(risk);
+
+  const expected = document.createElement("p");
+  expected.className = "reasoning-block";
+  const expectedLabel = document.createElement("strong");
+  expectedLabel.textContent = "Expected risk & return: ";
+  expected.appendChild(expectedLabel);
+  const returnPct = (row.risk_expected_return * 100).toFixed(2);
+  const drawdownPct = (row.risk_expected_drawdown * 100).toFixed(2);
+  expected.appendChild(
+    document.createTextNode(
+      `${Number(returnPct) >= 0 ? "+" : ""}${returnPct}% expected return, ${drawdownPct}% expected drawdown ` +
+        `(heuristic, confidence x volatility scaled -- not a backtested figure).`,
+    ),
+  );
+  container.appendChild(expected);
+
+  if (row.alternatives.length > 0) {
+    const altHeading = document.createElement("p");
+    altHeading.className = "reasoning-block";
+    const altLabel = document.createElement("strong");
+    altLabel.textContent = "Alternative stocks considered: ";
+    altHeading.appendChild(altLabel);
+    container.appendChild(altHeading);
+
+    for (const alt of row.alternatives) {
+      const line = document.createElement("div");
+      line.className = "agent-vote";
+      const name = document.createElement("div");
+      name.className = "agent-name";
+      name.appendChild(badge(alt.decision));
+      const nameText = document.createElement("span");
+      nameText.style.marginLeft = "6px";
+      nameText.textContent = alt.symbol;
+      name.appendChild(nameText);
+      const confidence = document.createElement("div");
+      confidence.className = "agent-confidence";
+      confidence.textContent = alt.confidence.toFixed(2);
+      line.append(name, document.createElement("div"), confidence);
+      container.appendChild(line);
+    }
+  }
 }
 
 /** Raw broker cash is a ledger balance, not equity -- shorting a stock credits

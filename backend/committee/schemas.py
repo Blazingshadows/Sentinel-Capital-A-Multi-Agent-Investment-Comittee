@@ -17,7 +17,9 @@ from pydantic import BaseModel, Field, computed_field
 class Decision(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
+    HOLD = "HOLD"
     WAIT = "WAIT"
+    SWITCH = "SWITCH"
 
 
 class RiskAction(str, Enum):
@@ -39,7 +41,11 @@ class AgentOutput(BaseModel):
     @computed_field
     @property
     def signed_vote(self) -> float:
-        sign = {Decision.BUY: 1, Decision.SELL: -1, Decision.WAIT: 0}[self.decision]
+        # HOLD/SWITCH are consensus-level decisions (they need portfolio
+        # position and cross-symbol context no individual specialist has) --
+        # specialists only ever emit BUY/SELL/WAIT. Mapped to 0 here anyway
+        # so this never KeyErrors if that assumption is ever violated.
+        sign = {Decision.BUY: 1, Decision.SELL: -1, Decision.WAIT: 0, Decision.HOLD: 0, Decision.SWITCH: 0}[self.decision]
         return sign * self.confidence
 
 
@@ -99,17 +105,34 @@ class DebateResult(BaseModel):
 
 
 class AgentInfluence(BaseModel):
-    """Every factor behind one agent's weight this cycle — the Dynamic Trust
-    Framework's `Agent Influence = Confidence x Trust x Context Relevance`,
-    logged so the committee stays explainable rather than a black box."""
+    """Every factor behind one agent's weight this cycle -- the Dynamic Trust
+    Framework's `Agent Influence = Confidence x Trust x Expertise x Context
+    Relevance x Agreement`, logged so the committee stays explainable rather
+    than a black box. `trust_score` is historical reliability itself
+    (Laplace-smoothed resolved-prediction hit rate); `agreement_factor` is
+    this agent's this-cycle divergence from the rest of the committee,
+    discounted when redundant and boosted when it's trust-backed dissent."""
 
     agent: str
     confidence: float
     trust_score: float
+    expertise: float
     context_relevance: float
+    agreement_factor: float
     influence_raw: float
     influence_normalized: float
     signed_vote: float
+
+
+class AlternativeCandidate(BaseModel):
+    """One other watchlist symbol's consensus this same cycle, surfaced so a
+    decision can report the PS-mandated "Alternative Stocks Considered" --
+    only meaningful in a watchlist pass, where every symbol is evaluated
+    together; a single-symbol cycle has nothing to compare against."""
+
+    symbol: str
+    decision: Decision
+    confidence: float
 
 
 class ConsensusDecision(BaseModel):
@@ -123,6 +146,7 @@ class ConsensusDecision(BaseModel):
     reasoning: str
     influence_breakdown: list[AgentInfluence]
     debate: DebateResult
+    alternatives: list[AlternativeCandidate] = Field(default_factory=list)
 
 
 class RiskVerdict(BaseModel):
@@ -133,6 +157,12 @@ class RiskVerdict(BaseModel):
     approved_allocation: float = Field(ge=0.0, le=2.0)
     volatility_estimate: float = Field(ge=0.0, description="GARCH-estimated annualized volatility")
     reason: str
+    expected_return: float = Field(
+        default=0.0, description="Heuristic: signed, confidence x volatility scaled -- not a backtested figure"
+    )
+    expected_drawdown: float = Field(
+        default=0.0, ge=0.0, description="Heuristic: volatility-scaled worst-case-this-trade estimate"
+    )
 
 
 class CostBreakdown(BaseModel):

@@ -10,7 +10,7 @@ Claude Haiku 4.5 supports it natively.
 from typing import TypeVar
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from backend.committee.config import ANTHROPIC_MODEL_NAME, settings
 
@@ -40,12 +40,18 @@ def complete(system: str, user: str, schema: type[T]) -> T:
         try:
             response = client.messages.parse(
                 model=ANTHROPIC_MODEL_NAME,
-                max_tokens=1024,
+                max_tokens=2048,
                 system=system,
                 messages=[{"role": "user", "content": user}],
                 output_format=schema,
             )
             return response.parsed_output
+        except (ValidationError, ValueError) as exc:
+            # messages.parse() raises this when the response got cut off
+            # mid-JSON (hit max_tokens before finishing) -- worth a retry,
+            # not an immediate failure, same as the other providers.
+            last_error = exc
+            continue
         except anthropic.APIError as exc:
             last_error = exc
             continue

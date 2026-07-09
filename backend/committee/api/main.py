@@ -14,7 +14,7 @@ from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_p
 from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.orchestration.cycle import run_cycle
-from backend.committee.orchestration.loop import run_watchlist_once
+from backend.committee.orchestration.loop import run_watchlist_once, square_off_all_positions
 from backend.committee.persistence import repository
 from backend.committee.persistence.db import init_db, make_engine, make_session_factory
 
@@ -44,9 +44,11 @@ app = FastAPI(title="Autonomous Multi-Agent Investment Committee", lifespan=life
 
 # Dashboard runs on the Vite dev server (a different origin/port) during
 # development; loosest-that's-still-scoped since this never leaves localhost.
+# Regex (not a fixed port) because Vite silently bumps to 5174/5175/... when
+# 5173 is already taken by another dev server instance.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -68,6 +70,9 @@ def _decision_to_dict(row) -> dict:
         "risk_approved_allocation": row.risk_approved_allocation,
         "risk_volatility_estimate": row.risk_volatility_estimate,
         "risk_reason": row.risk_reason,
+        "risk_expected_return": row.risk_expected_return,
+        "risk_expected_drawdown": row.risk_expected_drawdown,
+        "alternatives": row.alternatives or [],
         "action_taken": row.action_taken,
         "qty": row.qty,
         "price": row.price,
@@ -123,6 +128,20 @@ def trigger_watchlist(request: Request) -> list[dict]:
     session = request.app.state.session_factory()
     try:
         logs = run_watchlist_once(session, request.app.state.portfolio)
+        return [log.model_dump(mode="json") for log in logs]
+    finally:
+        session.close()
+
+
+@app.post("/session/square-off")
+def trigger_square_off(request: Request) -> list[dict]:
+    """Manually forces every open position flat right now -- the same
+    action that fires automatically when the session crosses market close.
+    Exists so this control is demoable without waiting for the actual
+    15:15 IST boundary."""
+    session = request.app.state.session_factory()
+    try:
+        logs = square_off_all_positions(session, request.app.state.portfolio)
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()

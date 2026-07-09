@@ -242,6 +242,16 @@ tbody tr.selected {
   background: color-mix(in srgb, var(--text-muted) 14%, transparent);
 }
 
+.badge.hold {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, transparent);
+}
+
+.badge.switch {
+  color: var(--series-1);
+  background: color-mix(in srgb, var(--series-1) 14%, transparent);
+}
+
 tfoot td {
   padding: 8px 10px;
   border-top: 1px solid var(--gridline);

@@ -82,10 +82,29 @@ WATCHLIST_FUNDAMENTALS = {
 }
 
 # --- Consensus Orchestrator (README "Dynamic Trust Framework") -------------
-# Agent Influence = Confidence x Trust x Context Relevance
+# Agent Influence = Confidence x Trust x Expertise x Context Relevance x Agreement
 DECISION_THRESHOLD_WAIT = 0.15  # |weighted signal| below this -> WAIT
 TRUST_PRIOR = 0.5  # Laplace-smoothed starting trust before any history
 TRUST_SMOOTHING = 2.0  # Laplace smoothing constant (pseudo-observations)
+
+# How much this-cycle disagreement with the rest of the committee can boost
+# an agent's influence, as a fraction: 0.3 means the agreement factor is
+# bounded to [1.0, 1.3]. Boost-only -- an agent who diverges from the room
+# while carrying above-prior trust is boosted (informative dissent, not just
+# contrarianism for its own sake); full agreement is left neutral (1.0)
+# rather than discounted, see trust/scoring.agreement_factor's docstring for
+# why a discount would perversely penalize the most reliable agreeing
+# agents most whenever the committee genuinely agrees.
+AGREEMENT_SENSITIVITY = 0.3
+
+# --- Cross-symbol comparison (watchlist passes only) ------------------------
+# A held symbol only gets upgraded from HOLD/WAIT to SWITCH when an unheld
+# alternative both clears its own real-conviction bar (SWITCH_MIN_CONFIDENCE)
+# and beats the held symbol's confidence by a real margin
+# (SWITCH_CONFIDENCE_MARGIN) -- guards against churning out of a position on
+# a marginal, noisy confidence difference between two mediocre candidates.
+SWITCH_MIN_CONFIDENCE = 0.3
+SWITCH_CONFIDENCE_MARGIN = 0.15
 
 # Static base expertise per agent for short-horizon intraday calls; multiplied
 # by context_relevance (below) so "how good this agent generally is" and "how
@@ -120,6 +139,24 @@ EXTREME_VOLATILITY_ANNUALIZED = 1.0  # above this, reject the trade outright
 VOLATILITY_TRIM_FACTOR = 0.5
 INTRADAY_BARS_PER_DAY = 75  # NSE 9:15-15:30 session / 5-min bars
 TRADING_DAYS_PER_YEAR = 252
+
+# Hard stop-loss: a held position whose unrealized move against its cost
+# basis breaches this fraction is force-closed next cycle regardless of what
+# the committee's directional view says -- independent of, and a hard floor
+# under, the volatility-based sizing above. The business briefing this
+# project shipped named the lack of exactly this control as the main risk
+# gap before live capital.
+STOP_LOSS_PCT = 0.03
+
+# Expected Risk & Return (PS-mandated per-trade output) -- a heuristic
+# projection from GARCH-estimated annualized volatility and consensus
+# confidence, not a backtested or historically-calibrated figure. De-
+# annualized to one session's expected move, then scaled: confidence=1.0
+# is read as "expect to capture EXPECTED_RETURN_VOL_FRACTION of the day's
+# vol-implied move"; expected_drawdown is a fixed multiple of that same
+# per-session vol, direction-independent.
+EXPECTED_RETURN_VOL_FRACTION = 0.5
+EXPECTED_DRAWDOWN_VOL_MULTIPLIER = 1.5
 
 # --- NSE intraday equity retail cost model (fractions, not percentages) ----
 BROKERAGE_FLAT_CAP = 20.0
