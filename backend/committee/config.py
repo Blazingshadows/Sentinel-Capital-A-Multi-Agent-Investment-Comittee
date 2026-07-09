@@ -33,8 +33,11 @@ CAPITAL = 10_000.0
 LEVERAGE = 2
 BUYING_POWER = CAPITAL * LEVERAGE
 
-# --- Watchlist (liquid NSE large-caps) --------------------------------------
-WATCHLIST = [
+# --- Watchlist ----------------------------------------------------------------
+# Nifty 50 large-caps (original 10) + Nifty Midcap 100 (below) -- intraday
+# moves aren't confined to large-caps, so the universe was widened to include
+# the full official Midcap 100 index for more setups per cycle.
+NIFTY_LARGECAP_WATCHLIST = [
     "RELIANCE",
     "TCS",
     "HDFCBANK",
@@ -47,9 +50,35 @@ WATCHLIST = [
     "ADANIENT",
 ]
 
+# NSE Nifty Midcap 100 official constituent list (fetched from
+# archives.nseindia.com 2026-07-09). Rebalanced twice a year by NSE Indices --
+# re-pull and diff periodically so delisted/promoted names don't go stale.
+NIFTY_MIDCAP100_WATCHLIST = [
+    "360ONE", "APLAPOLLO", "AUBANK", "ATGL", "ABCAPITAL", "ALKEM", "ASHOKLEY",
+    "ASTRAL", "AUROPHARMA", "BSE", "BANKINDIA", "BDL", "BHARATFORG", "BHEL",
+    "GROWW", "BIOCON", "BLUESTARCO", "COCHINSHIP", "COFORGE", "COLPAL",
+    "CONCOR", "COROMANDEL", "DABUR", "DIXON", "EXIDEIND", "NYKAA",
+    "FEDERALBNK", "FORTIS", "GVT&D", "GMRAIRPORT", "GLENMARK", "GODFRYPHLP",
+    "GODREJPROP", "HAVELLS", "HEROMOTOCO", "HINDPETRO", "POWERINDIA", "HUDCO",
+    "ICICIGI", "ICICIAMC", "IDFCFIRSTB", "INDIANB", "IRCTC", "IREDA",
+    "INDUSTOWER", "INDUSINDBK", "NAUKRI", "JSWENERGY", "JUBLFOOD", "KEI",
+    "KPITTECH", "KALYANKJIL", "LTF", "LGEINDIA", "LICHSGFIN", "LAURUSLABS",
+    "LENSKART", "LUPIN", "MRF", "M&MFIN", "MANKIND", "MARICO", "MFSL",
+    "MOTILALOFS", "MPHASIS", "MCX", "NHPC", "NMDC", "NATIONALUM",
+    "OBEROIRLTY", "OIL", "PAYTM", "OFSS", "POLICYBZR", "PIIND", "PAGEIND",
+    "PATANJALI", "PERSISTENT", "PHOENIXLTD", "POLYCAB", "PREMIERENE",
+    "PRESTIGE", "RADICO", "RVNL", "SBICARD", "SRF", "SAIL", "SUPREMEIND",
+    "SUZLON", "SWIGGY", "TATACOMM", "TATAELXSI", "TATAINVEST", "TIINDIA",
+    "UPL", "VMM", "IDEA", "VOLTAS", "WAAREEENER", "YESBANK",
+]
+
+WATCHLIST = NIFTY_LARGECAP_WATCHLIST + NIFTY_MIDCAP100_WATCHLIST
+
 # Breeze's own stock_code, which is NOT the NSE tradingsymbol (e.g. RELIANCE's
 # code is "RELIND"). Verified 2026-07-09 against a live account by fetching
 # each symbol via breeze_client and cross-checking INFY through get_names().
+# The Midcap 100 block below was resolved the same way, in bulk, via
+# get_names() for every symbol in NIFTY_MIDCAP100_WATCHLIST.
 BREEZE_STOCK_CODE_MAP = {
     "RELIANCE": "RELIND",
     "TCS": "TCS",
@@ -61,6 +90,106 @@ BREEZE_STOCK_CODE_MAP = {
     "ITC": "ITC",
     "LT": "LARTOU",
     "ADANIENT": "ADAENT",
+    "360ONE": "IIFWEA",
+    "APLAPOLLO": "APLAPO",
+    "AUBANK": "AUSMA",
+    "ATGL": "ADAGAS",
+    "ABCAPITAL": "ADICAP",
+    "ALKEM": "ALKLAB",
+    "ASHOKLEY": "ASHLEY",
+    "ASTRAL": "ASTPOL",
+    "AUROPHARMA": "AURPHA",
+    "BSE": "BSE",
+    "BANKINDIA": "BANIND",
+    "BDL": "BHADYN",
+    "BHARATFORG": "BHAFOR",
+    "BHEL": "BHEL",
+    "GROWW": "BILGAR",
+    "BIOCON": "BIOCON",
+    "BLUESTARCO": "BLUSTA",
+    "COCHINSHIP": "COCSHI",
+    "COFORGE": "NIITEC",
+    "COLPAL": "COLPAL",
+    "CONCOR": "CONCOR",
+    "COROMANDEL": "CORINT",
+    "DABUR": "DABIND",
+    "DIXON": "DIXTEC",
+    "EXIDEIND": "EXIIND",
+    "NYKAA": "FSNECO",
+    "FEDERALBNK": "FEDBAN",
+    "FORTIS": "FORHEA",
+    "GVT&D": "ALSTD",
+    "GMRAIRPORT": "GMRINF",
+    "GLENMARK": "GLEPHA",
+    "GODFRYPHLP": "GODPHI",
+    "GODREJPROP": "GODPRO",
+    "HAVELLS": "HAVIND",
+    "HEROMOTOCO": "HERHON",
+    "HINDPETRO": "HINPET",
+    "POWERINDIA": "ABBPOW",
+    "HUDCO": "HUDCO",
+    "ICICIGI": "ICILOM",
+    "ICICIAMC": "ICIAMC",
+    "IDFCFIRSTB": "IDFBAN",
+    "INDIANB": "INDIBA",
+    "IRCTC": "INDRAI",
+    "IREDA": "INDREN",
+    "INDUSTOWER": "BHAINF",
+    "INDUSINDBK": "INDBA",
+    "NAUKRI": "INFEDG",
+    "JSWENERGY": "JSWENE",
+    "JUBLFOOD": "JUBFOO",
+    "KEI": "KEIIND",
+    "KPITTECH": "KPITE",
+    "KALYANKJIL": "KALJEW",
+    "LTF": "LTFINA",
+    "LGEINDIA": "LGELEC",
+    "LICHSGFIN": "LICHF",
+    "LAURUSLABS": "LAULAB",
+    "LENSKART": "LENSOL",
+    "LUPIN": "LUPIN",
+    "MRF": "MRFTYR",
+    "M&MFIN": "MAHFIN",
+    "MANKIND": "MAPHA",
+    "MARICO": "MARLIM",
+    "MFSL": "MAXFIN",
+    "MOTILALOFS": "MOTOSW",
+    "MPHASIS": "MPHLIM",
+    "MCX": "MCX",
+    "NHPC": "NHPC",
+    "NMDC": "NATMIN",
+    "NATIONALUM": "NATALU",
+    "OBEROIRLTY": "OBEREA",
+    "OIL": "OILIND",
+    "PAYTM": "ONE97",
+    "OFSS": "ORAFIN",
+    "POLICYBZR": "PBFINT",
+    "PIIND": "PIIND",
+    "PAGEIND": "PAGIND",
+    "PATANJALI": "RUCSOY",
+    "PERSISTENT": "PERSYS",
+    "PHOENIXLTD": "PHOMIL",
+    "POLYCAB": "POLI",
+    "PREMIERENE": "PREENR",
+    "PRESTIGE": "PREEST",
+    "RADICO": "RADKHA",
+    "RVNL": "RAIVIK",
+    "SBICARD": "SBICAR",
+    "SRF": "SRF",
+    "SAIL": "SAIL",
+    "SUPREMEIND": "SUPIND",
+    "SUZLON": "SUZENE",
+    "SWIGGY": "SWILIM",
+    "TATACOMM": "TATCOM",
+    "TATAELXSI": "TATELX",
+    "TATAINVEST": "TATINV",
+    "TIINDIA": "TUBIN",
+    "UPL": "UNIP",
+    "VMM": "VISMEG",
+    "IDEA": "IDECEL",
+    "VOLTAS": "VOLTAS",
+    "WAAREEENER": "WAAENE",
+    "YESBANK": "YESBAN",
 }
 
 # Breeze has no fundamentals/sector data (it's a trading API, not a data
