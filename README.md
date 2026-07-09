@@ -1,6 +1,18 @@
 # Autonomous Multi-Agent Investment Committee
 ### PS #10 — Directional Confidence-Aware Consensus for Intraday Paper Trading (NSE/BSE)
 
+This document is the problem statement and design mission the system is
+built against. For how it's actually implemented today — architecture,
+agent specs, API reference, and how to run it — see:
+
+- **[docs/architecture.md](docs/architecture.md)** — system design, data flow, module map
+- **[docs/agents.md](docs/agents.md)** — per-agent specs (inputs, logic, outputs, failure behavior)
+- **[docs/api.md](docs/api.md)** — REST API reference
+- **[docs/setup.md](docs/setup.md)** — install, configure, run, train, test
+
+See [Implementation Snapshot](#implementation-snapshot) below for how the
+current codebase maps onto the requirements in this document.
+
 ## Problem Statement
 
 Retail and institutional investors face an overwhelming amount of market information every day:
@@ -145,6 +157,8 @@ Each specialist agent is backed by a **custom-built** AI/ML tool (APIs may be us
 | Contrarian Agent | — (cross-cutting) | Challenges consensus assumptions, surfaces blind spots | Counterarguments, risk observations, confidence adjustments |
 
 All specialist agents (except the Contrarian) output a directional call from the full five-action space, a confidence score, and supporting evidence.
+
+> **Implementation note:** the current codebase implements Technical, News & Sentiment, Macro, Forecasting, and Contrarian as the five agents driving each committee cycle, plus a separate Opportunity Discovery subsystem covering universe screening (see [Implementation Snapshot](#implementation-snapshot)). Fundamental Analysis, Sector Intelligence, and Risk Prediction are covered as factors/logic inside other layers rather than as standalone specialist agents today — see the snapshot for the detailed mapping.
 
 ---
 
@@ -411,3 +425,55 @@ BUY INFY intraday → Portfolio updated → Position flagged for mandatory closu
 # Key Innovation
 
 Most AI trading systems attempt to predict the market using a single model. Our system instead models the collaborative decision-making process of a real investment committee — where multiple specialist experts debate, challenge assumptions, build multi-factor trust over time, and allocate leveraged capital through a Directional Confidence-Aware Consensus that is explainable down to the individual agent vote — while operating under the real constraints of intraday NSE/BSE paper trading: fixed capital, leverage, a hard session clock, and realistic trading costs.
+
+---
+
+# Implementation Snapshot
+
+What's actually built, as of the ICICI Breeze migration and the Opportunity
+Discovery subsystem. Full detail lives in `docs/` (linked above); this is
+the map from problem-statement language to real code.
+
+## Requirement → implementation
+
+| PS Requirement | Status | Where |
+|---|---|---|
+| Technical Indicator Engine | Implemented — RSI, MACD, EMA cross, momentum, pure pandas/numpy | `backend/committee/agents/technical.py` |
+| News & Sentiment Analysis | Implemented — LLM-backed (Gemini), RSS-sourced headlines | `backend/committee/agents/news_sentiment.py`, `market_data/news.py` |
+| Time-Series / DL Forecasting | Implemented — LightGBM classifier, offline-trained | `backend/committee/agents/forecasting.py`, `scripts/train_forecasting_model.py` |
+| Policy & Geopolitical Impact | Implemented — LLM-backed (OpenAI) Macro agent | `backend/committee/agents/macro.py` |
+| Contrarian / cross-cutting challenger | Implemented — LLM-backed (Anthropic), dual role in the Debate Layer | `backend/committee/debate/contrarian.py`, `debate/engine.py` |
+| Opportunity Discovery | Implemented — separate subsystem: scan → score → diversify over the NSE universe | `backend/committee/discovery/` (`docs/agents.md` §Opportunity Discovery) |
+| Fundamental Analysis | Partial — static sector/market-cap table feeds the Macro agent's prompt; no dedicated agent (Breeze has no fundamentals endpoint) | `config.WATCHLIST_FUNDAMENTALS` |
+| Sector Intelligence | Partial — sector-relative-strength is one of Discovery's 11 scoring factors; no dedicated live agent | `discovery/scoring.py` (`sector_strength` factor) |
+| Risk Prediction | Implemented as the Risk Management Layer's own GARCH(1,1) volatility check, not a separate specialist vote | `backend/committee/risk/volatility.py`, `risk/manager.py` |
+| Directional Confidence-Aware Consensus (no majority vote/averaging) | Implemented — `Confidence x Trust x Context Relevance`, normalized across the committee | `backend/committee/consensus/orchestrator.py`, `trust/scoring.py` |
+| Debate Layer (independent → challenge → revise) | Implemented as one deterministic confidence-damping pass, not further LLM calls | `backend/committee/debate/engine.py` |
+| Dynamic Trust Framework | Implemented — Laplace-smoothed historical reliability + context relevance; expertise folded into context relevance, agreement handled by the Debate Layer | `backend/committee/trust/scoring.py` |
+| Risk Management (₹10,000 / 1:2 leverage) | Implemented — position cap, volatility trim/reject, cross-symbol capital allocator | `backend/committee/risk/manager.py`, `orchestration/allocator.py` |
+| Execution + real NSE costs | Implemented — brokerage/STT/exchange/SEBI/stamp-duty/GST/slippage, delta-sized orders | `backend/committee/execution/` |
+| Forced closure before market close | Not yet enforced automatically — `SESSION_SQUARE_OFF` (15:15 IST) is configured but no scheduled square-off job exists yet | `config.SESSION_SQUARE_OFF` |
+| Explainable per-trade audit log | Implemented — every cycle (trade or no-trade) persisted with full agent/debate/consensus/risk detail | `backend/committee/persistence/`, `audit/report.py` |
+| Interactive dashboard | Implemented — Vite + TypeScript, portfolio curve, decision drill-down, trade log, session run/stop control | `frontend/` |
+| Historical replay evaluation | Implemented — bar-by-bar replay through the exact same pipeline | `backend/committee/replay/player.py` |
+| Baseline comparison | Implemented — vectorbt SMA-crossover, matched cash/costs/methodology | `backend/committee/baseline/`, `scripts/compare_baseline.py` |
+
+## Tech stack
+
+- **Backend:** Python 3.11+, FastAPI, SQLAlchemy + SQLite, pandas/numpy/scikit-learn, `arch` (GARCH), LightGBM, `breeze-connect`
+- **LLMs:** Gemini, OpenAI, and Anthropic — one provider per LLM-backed agent, by design (see `docs/architecture.md` §LLM routing)
+- **Market data:** ICICI Direct Breeze API (migrated from yfinance — SEBI requires a daily manual login; see `docs/setup.md`)
+- **Frontend:** Vite + vanilla TypeScript, no framework
+- **Testing:** pytest, an in-memory SQLite fixture, and a vectorbt-based baseline comparison
+
+## Getting started
+
+```bash
+pip install -e ".[dev]"
+cp .env.example .env   # fill in LLM keys + Breeze credentials
+uvicorn backend.committee.api.main:app --reload --port 8000
+cd frontend && npm install && npm run dev
+```
+
+Full instructions, including the Breeze daily login flow and training the
+Forecasting model, are in `docs/setup.md`.
