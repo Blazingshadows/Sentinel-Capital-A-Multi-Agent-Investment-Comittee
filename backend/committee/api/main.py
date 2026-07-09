@@ -44,9 +44,11 @@ app = FastAPI(title="Autonomous Multi-Agent Investment Committee", lifespan=life
 
 # Dashboard runs on the Vite dev server (a different origin/port) during
 # development; loosest-that's-still-scoped since this never leaves localhost.
+# Regex (not a fixed port) because Vite silently bumps to 5174/5175/... when
+# 5173 is already taken by another dev server instance.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )
