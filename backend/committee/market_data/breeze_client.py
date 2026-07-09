@@ -16,6 +16,7 @@ Breeze quirks that shape this module:
   model file is missing rather than crashing the cycle.
 """
 
+import threading
 import time
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -46,6 +47,7 @@ class BreezeAuthError(BreezeError):
 
 
 _client: "BreezeConnect | None" = None
+_client_lock = threading.Lock()
 
 
 def _get_client() -> "BreezeConnect":
@@ -63,34 +65,51 @@ def _get_client() -> "BreezeConnect":
     market data. Deferring it means only the first actual Breeze call pays
     that cost, and a transient failure here degrades to BreezeAuthError
     like any other Breeze error instead of taking down the process.
+
+    Locked because Discovery fetches many symbols concurrently
+    (ThreadPoolExecutor) -- without this, every thread's first call sees
+    `_client is None` at the same time and each independently calls
+    generate_session(), and Breeze's backend rejects the resulting flood of
+    concurrent session-creation requests for the same API key with
+    "Unable to retrieve customer details at the moment" (verified directly:
+    219 of 229 concurrently-fetched symbols failed with exactly that error
+    before this lock was added; only the 10 already disk-cached from
+    earlier single-threaded runs, which never touch this function at all,
+    succeeded). The lock only guards session creation, not the historical-
+    data calls themselves -- those are independent per-request HTTP calls
+    safe to run concurrently once one thread has set up `_client`.
     """
     global _client
     if _client is not None:
         return _client
 
-    if not (settings.breeze_api_key and settings.breeze_api_secret and settings.breeze_session_token):
-        raise BreezeAuthError(
-            "Breeze credentials not configured. Set BREEZE_API_KEY and BREEZE_API_SECRET in .env "
-            "(from https://api.icicidirect.com/apiuser/home), log in there to grab today's api_session, "
-            "and set it as BREEZE_SESSION_TOKEN. It expires at midnight -- refresh it every trading day."
-        )
+    with _client_lock:
+        if _client is not None:  # another thread won the race while we waited
+            return _client
 
-    try:
-        from breeze_connect import BreezeConnect
-    except Exception as exc:
-        raise BreezeAuthError(f"Failed to load breeze_connect (network issue at import time?): {exc}") from exc
+        if not (settings.breeze_api_key and settings.breeze_api_secret and settings.breeze_session_token):
+            raise BreezeAuthError(
+                "Breeze credentials not configured. Set BREEZE_API_KEY and BREEZE_API_SECRET in .env "
+                "(from https://api.icicidirect.com/apiuser/home), log in there to grab today's api_session, "
+                "and set it as BREEZE_SESSION_TOKEN. It expires at midnight -- refresh it every trading day."
+            )
 
-    client = BreezeConnect(api_key=settings.breeze_api_key)
-    try:
-        client.generate_session(api_secret=settings.breeze_api_secret, session_token=settings.breeze_session_token)
-    except Exception as exc:
-        raise BreezeAuthError(
-            f"Breeze session setup failed ({exc}) -- BREEZE_SESSION_TOKEN is likely expired or wrong; "
-            "log in again and refresh it in .env."
-        ) from exc
+        try:
+            from breeze_connect import BreezeConnect
+        except Exception as exc:
+            raise BreezeAuthError(f"Failed to load breeze_connect (network issue at import time?): {exc}") from exc
 
-    _client = client
-    return _client
+        client = BreezeConnect(api_key=settings.breeze_api_key)
+        try:
+            client.generate_session(api_secret=settings.breeze_api_secret, session_token=settings.breeze_session_token)
+        except Exception as exc:
+            raise BreezeAuthError(
+                f"Breeze session setup failed ({exc}) -- BREEZE_SESSION_TOKEN is likely expired or wrong; "
+                "log in again and refresh it in .env."
+            ) from exc
+
+        _client = client
+        return _client
 
 
 def _stock_code(symbol: str) -> str:

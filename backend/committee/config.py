@@ -34,6 +34,11 @@ LEVERAGE = 2
 BUYING_POWER = CAPITAL * LEVERAGE
 
 # --- Watchlist (liquid NSE large-caps) --------------------------------------
+# Fallback only -- a live/replay session's real watchlist comes from
+# Opportunity Discovery (see orchestration/watchlist.py) when it succeeds;
+# this fixed list is what it falls back to if Discovery can't run (e.g. no
+# usable data at all) or is bypassed entirely (single-symbol /cycle/{symbol}
+# calls, unit tests).
 WATCHLIST = [
     "RELIANCE",
     "TCS",
@@ -46,6 +51,15 @@ WATCHLIST = [
     "LT",
     "ADANIENT",
 ]
+
+# How many of Discovery's rank-ordered, diversified candidates the committee
+# actually trades each session. Discovery's own target is 50-60 names (see
+# discovery/config/default_config.json) -- deliberately not run through the
+# full 5-agent, 3-LLM-call committee pipeline every cycle, since that's
+# 50-60x the LLM cost/time of today's fixed 10-symbol watchlist. Top-N by
+# opportunity_score keeps per-cycle cost bounded while still being a real,
+# dynamically-selected watchlist rather than a hardcoded one.
+COMMITTEE_WATCHLIST_SIZE = 20
 
 # Breeze's own stock_code, which is NOT the NSE tradingsymbol (e.g. RELIANCE's
 # code is "RELIND"). Verified 2026-07-09 against a live account by fetching

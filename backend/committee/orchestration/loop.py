@@ -151,18 +151,32 @@ def _apply_cross_symbol_comparison(evaluations: list[tuple], portfolio: Portfoli
 
 def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
                         context_flags: list[str] | None = None,
-                        context_provider: Callable[[str], MarketContext] | None = None) -> list[DecisionLog]:
+                        context_provider: Callable[[str], MarketContext] | None = None,
+                        progress: dict | None = None) -> list[DecisionLog]:
     """`context_provider(symbol) -> MarketContext` overrides the default live
     Breeze fetch -- Replay Mode's only hook into this function, so a replay
     pass runs through the *exact* same allocator/stop-loss/cross-symbol-
     comparison path a live pass does instead of a parallel implementation
     that could silently drift out of sync with it (or reintroduce the
-    allocator-bypass bug an earlier, simpler Replay Mode had)."""
+    allocator-bypass bug an earlier, simpler Replay Mode had).
+
+    `progress`, if given, is mutated in place (current_symbol/
+    symbols_completed/symbols_total) so a caller polling it from another
+    coroutine (the API layer) can show real per-symbol status instead of the
+    dashboard looking frozen for however long a full pass takes."""
     cycle_ts = datetime.now(timezone.utc)
     fetch_context = context_provider or (lambda symbol: build_context(symbol, context_flags=context_flags))
     evaluations = []
 
+    if progress is not None:
+        progress["phase"] = "evaluating"
+        progress["symbols_total"] = len(watchlist)
+        progress["symbols_completed"] = 0
+
     for symbol in watchlist:
+        if progress is not None:
+            progress["current_symbol"] = symbol
+            progress["detail"] = f"Evaluating {symbol} ({progress['symbols_completed'] + 1}/{len(watchlist)})..."
         try:
             context = fetch_context(symbol)
             current_position = portfolio.positions.get(symbol, 0.0)
@@ -170,7 +184,9 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
             evaluations.append((context, consensus, risk_verdict, revised_recommendations))
         except Exception:
             logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
-            continue
+        finally:
+            if progress is not None:
+                progress["symbols_completed"] += 1
 
     evaluations = _apply_stop_loss(evaluations, portfolio)
     evaluations = _apply_cross_symbol_comparison(evaluations, portfolio)
@@ -181,8 +197,19 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
     ]
     adjusted_verdicts = allocate_capital(candidates, portfolio)
 
+    if progress is not None:
+        progress["phase"] = "executing"
+        progress["detail"] = "Executing approved trades..."
+
     logs: list[DecisionLog] = []
-    latest_prices: dict[str, float] = {}
+    # Seeded with every symbol evaluated this cycle *before* the execution
+    # loop starts (not grown incrementally from only-already-executed
+    # symbols) -- otherwise an early per-trade snapshot would price a
+    # held-but-not-yet-processed-this-cycle position at 0 via
+    # mark_to_market's prices.get(symbol, 0.0) fallback, understating
+    # portfolio_value until that symbol's own turn came up later in the
+    # same loop.
+    latest_prices: dict[str, float] = {context.symbol: context.latest_price for context, _, _, _ in evaluations}
 
     for context, consensus, risk_verdict, revised_recommendations in evaluations:
         final_verdict = adjusted_verdicts.get(context.symbol, risk_verdict)
@@ -192,11 +219,16 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
             logger.exception("Execution failed for %s — skipping this stock this pass.", context.symbol)
             continue
         logs.append(log)
-        latest_prices[context.symbol] = context.latest_price
-
-    if latest_prices:
+        # Snapshot after every trade (not just once at the end of the pass)
+        # so the dashboard's value-over-time chart visibly grows as trades
+        # land instead of jumping once per whole cycle.
         snapshot = portfolio.mark_to_market(latest_prices)
         repository.insert_portfolio_snapshot(session, snapshot)
+
+    if progress is not None:
+        progress["phase"] = "idle"
+        progress["current_symbol"] = None
+        progress["detail"] = f"Cycle complete — {len(logs)} decision(s) processed."
 
     return logs
 
@@ -254,18 +286,29 @@ def square_off_all_positions(session: Session, portfolio: Portfolio) -> list[Dec
 
 
 async def run_forever(session_factory, watchlist: list[str] = WATCHLIST, interval_seconds: int = 300,
-                       force_run_outside_market_hours: bool = False) -> None:
+                       force_run_outside_market_hours: bool = False, use_discovery: bool = True,
+                       progress: dict | None = None) -> None:
     """Asyncio loop, one watchlist pass every `interval_seconds` during NSE
     market hours. `force_run_outside_market_hours` exists for Replay Mode
-    callers and local development, so the loop never has to be duplicated."""
+    callers and local development, so the loop never has to be duplicated.
+    `use_discovery=True` runs Opportunity Discovery once at session start to
+    pick the actual traded watchlist (see orchestration/watchlist.py);
+    `watchlist` is only used as the Discovery-disabled/Discovery-failed
+    fallback."""
     portfolio = Portfolio()
+    session_watchlist = watchlist
+    if use_discovery:
+        from backend.committee.orchestration.watchlist import select_session_watchlist
+
+        session_watchlist = select_session_watchlist(progress)
+
     was_market_hours = is_market_hours()
     while True:
         now_market_hours = is_market_hours()
         if force_run_outside_market_hours or now_market_hours:
             session = session_factory()
             try:
-                run_watchlist_once(session, portfolio, watchlist)
+                run_watchlist_once(session, portfolio, session_watchlist, progress=progress)
             finally:
                 session.close()
         elif was_market_hours:
