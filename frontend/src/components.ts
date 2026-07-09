@@ -1,5 +1,5 @@
 import { formatCurrency } from "./format";
-import type { DecisionRow, PortfolioState, ReportSummary, TradeRow } from "./types";
+import type { DecisionRow, PortfolioState, ReportSummary, SessionProgress, TradeRow } from "./types";
 
 const BADGE_CLASS: Record<string, string> = {
   BUY: "buy",
@@ -14,6 +14,99 @@ function badge(decision: string): HTMLElement {
   span.className = `badge ${BADGE_CLASS[decision] ?? "wait"}`;
   span.textContent = decision;
   return span;
+}
+
+const PHASE_LABEL: Record<string, string> = {
+  idle: "Idle",
+  starting: "Starting…",
+  discovering: "Screening universe…",
+  evaluating: "Evaluating…",
+  executing: "Executing trades…",
+  error: "Error",
+};
+
+/** Live status of a running /watchlist/run or /replay/run pass, polled from
+ * GET /session/progress -- gives the dashboard a pulse (stocks loaded,
+ * screener narrowing the universe, which symbol is being evaluated right
+ * now) instead of looking frozen for however long a full pass takes. */
+export function renderProgressPanel(container: HTMLElement, progress: SessionProgress | null): void {
+  container.innerHTML = "";
+
+  if (!progress || (progress.phase === "idle" && !progress.mode)) {
+    container.classList.add("hidden");
+    return;
+  }
+  container.classList.remove("hidden");
+
+  const header = document.createElement("div");
+  header.className = "progress-header";
+
+  const phaseEl = document.createElement("span");
+  phaseEl.className = `progress-phase phase-${progress.phase}`;
+  phaseEl.textContent = PHASE_LABEL[progress.phase] ?? progress.phase;
+  header.appendChild(phaseEl);
+
+  if (progress.mode) {
+    const modeEl = document.createElement("span");
+    modeEl.className = "progress-mode";
+    modeEl.textContent = progress.mode === "replay" ? "Replay demo" : "Watchlist cycle";
+    header.appendChild(modeEl);
+  }
+
+  const detailEl = document.createElement("span");
+  detailEl.className = "progress-detail";
+  detailEl.textContent = progress.detail ?? "";
+  header.appendChild(detailEl);
+
+  container.appendChild(header);
+
+  if (progress.watchlist && progress.watchlist.length > 0) {
+    const discoveryLine = document.createElement("div");
+    discoveryLine.className = "progress-discovery";
+    discoveryLine.textContent =
+      `${progress.universe_size ?? "?"} stocks loaded -> ${progress.survived_scan ?? "?"} passed the screen -> ` +
+      `${progress.selected_count ?? "?"} scored & diversified -> trading top ${progress.watchlist.length}: ` +
+      progress.watchlist.join(", ");
+    container.appendChild(discoveryLine);
+  }
+
+  if (progress.symbols_total) {
+    const completed = progress.symbols_completed ?? 0;
+    const pct = progress.symbols_total > 0 ? (completed / progress.symbols_total) * 100 : 0;
+
+    const track = document.createElement("div");
+    track.className = "progress-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "progress-bar-fill";
+    fill.style.width = `${pct}%`;
+    track.appendChild(fill);
+    container.appendChild(track);
+
+    const label = document.createElement("div");
+    label.className = "progress-bar-label";
+    label.textContent = progress.current_symbol
+      ? `${progress.current_symbol} (${completed}/${progress.symbols_total})`
+      : `${completed}/${progress.symbols_total} symbols`;
+    container.appendChild(label);
+  }
+
+  if (progress.max_bars) {
+    const barsPlayed = progress.bars_played ?? 0;
+    const pct = progress.max_bars > 0 ? (barsPlayed / progress.max_bars) * 100 : 0;
+
+    const track = document.createElement("div");
+    track.className = "progress-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "progress-bar-fill replay";
+    fill.style.width = `${pct}%`;
+    track.appendChild(fill);
+    container.appendChild(track);
+
+    const label = document.createElement("div");
+    label.className = "progress-bar-label";
+    label.textContent = `Replay tick ${barsPlayed}/${progress.max_bars}`;
+    container.appendChild(label);
+  }
 }
 
 export function renderStatTiles(container: HTMLElement, portfolio: PortfolioState, report: ReportSummary): void {

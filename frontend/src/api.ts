@@ -1,4 +1,4 @@
-import type { DecisionRow, PortfolioSnapshotRow, PortfolioState, ReportSummary, TradeRow } from "./types";
+import type { DecisionRow, PortfolioSnapshotRow, PortfolioState, ReportSummary, SessionProgress, TradeRow } from "./types";
 
 const BASE_URL = "http://127.0.0.1:8001";
 
@@ -25,4 +25,5 @@ export const api = {
   runWatchlist: () => postJson<DecisionRow[]>("/watchlist/run"),
   runReplay: (maxBars = 20) => postJson<{ status: string; max_bars: number }>(`/replay/run?max_bars=${maxBars}`),
   squareOff: () => postJson<unknown[]>("/session/square-off"),
+  sessionProgress: () => getJson<SessionProgress>("/session/progress"),
 };

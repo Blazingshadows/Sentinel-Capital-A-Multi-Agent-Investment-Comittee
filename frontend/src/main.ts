@@ -1,6 +1,13 @@
 import "./style.css";
 import { api } from "./api";
-import { renderCashLedger, renderDecisionDetail, renderDecisionsTable, renderStatTiles, renderTradesTable } from "./components";
+import {
+  renderCashLedger,
+  renderDecisionDetail,
+  renderDecisionsTable,
+  renderProgressPanel,
+  renderStatTiles,
+  renderTradesTable,
+} from "./components";
 import { renderPortfolioChart } from "./charts/portfolioChart";
 import type { DecisionRow } from "./types";
 
@@ -18,6 +25,8 @@ app.innerHTML = `
       <button id="square-off" title="Force-closes every open position right now, same as the automatic end-of-day close">Square off all</button>
     </div>
   </header>
+
+  <div class="progress-panel hidden" id="progress-panel"></div>
 
   <section>
     <h2>Portfolio</h2>
@@ -47,6 +56,7 @@ app.innerHTML = `
   </section>
 `;
 
+const progressPanelEl = document.querySelector<HTMLDivElement>("#progress-panel")!;
 const statTilesEl = document.querySelector<HTMLDivElement>("#stat-tiles")!;
 const chartEl = document.querySelector<HTMLDivElement>("#portfolio-chart")!;
 const decisionsTableEl = document.querySelector<HTMLDivElement>("#decisions-table")!;
@@ -100,47 +110,51 @@ async function init(): Promise<void> {
   await refresh();
 }
 
-runButton.addEventListener("click", async () => {
+// Both a watchlist cycle and a replay session run for real (real Breeze
+// fetches, real LLM calls per symbol) -- from seconds to several minutes,
+// not instant. Rather than the dashboard looking frozen for the whole
+// call, this polls GET /session/progress every second (screener stage,
+// symbol currently being evaluated, tick count) and does a full refresh()
+// every few seconds so decisions/trades/the value-over-time chart visibly
+// update as each trade lands (see loop.run_watchlist_once's per-trade
+// snapshot).
+async function runWithProgress(action: () => Promise<unknown>, label: string): Promise<void> {
   runButton.disabled = true;
-  statusLineEl.textContent = "Running watchlist cycle…";
-  try {
-    await api.runWatchlist();
-    await refresh();
-    statusLineEl.textContent = `Last run: ${new Date().toLocaleTimeString("en-IN")}`;
-  } catch (error) {
-    statusLineEl.textContent = `Run failed: ${(error as Error).message}`;
-  } finally {
-    runButton.disabled = false;
-  }
-});
-
-replayButton.addEventListener("click", async () => {
   replayButton.disabled = true;
-  const startedAt = Date.now();
-  const tick = () => {
-    const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
-    statusLineEl.textContent = `Replaying cached bars… (${elapsedSec}s -- runs real LLM calls per bar, this takes a while)`;
-  };
-  tick();
-  // Every symbol's bars run through the real pipeline (real LLM calls, no
-  // batching) -- a replay run takes minutes, not seconds. Poll refresh()
-  // periodically so decisions/trades/snapshots appear as they're written
-  // instead of the dashboard looking stuck for the whole run.
-  const pollTimer = window.setInterval(() => {
-    tick();
+  statusLineEl.textContent = label;
+
+  const progressTimer = window.setInterval(async () => {
+    try {
+      renderProgressPanel(progressPanelEl, await api.sessionProgress());
+    } catch {
+      // Transient poll failure -- next tick will retry; not worth surfacing.
+    }
+  }, 1_000);
+  const refreshTimer = window.setInterval(() => {
     refresh();
-  }, 4_000);
+  }, 3_000);
+
   try {
-    await api.runReplay();
-    statusLineEl.textContent = `Replay complete: ${new Date().toLocaleTimeString("en-IN")}`;
+    await action();
+    statusLineEl.textContent = `${label} complete: ${new Date().toLocaleTimeString("en-IN")}`;
   } catch (error) {
-    statusLineEl.textContent = `Replay failed: ${(error as Error).message}`;
+    statusLineEl.textContent = `${label} failed: ${(error as Error).message}`;
   } finally {
-    window.clearInterval(pollTimer);
+    window.clearInterval(progressTimer);
+    window.clearInterval(refreshTimer);
+    try {
+      renderProgressPanel(progressPanelEl, await api.sessionProgress());
+    } catch {
+      renderProgressPanel(progressPanelEl, null);
+    }
     await refresh();
+    runButton.disabled = false;
     replayButton.disabled = false;
   }
-});
+}
+
+runButton.addEventListener("click", () => runWithProgress(() => api.runWatchlist(), "Running watchlist cycle…"));
+replayButton.addEventListener("click", () => runWithProgress(() => api.runReplay(), "Replaying cached bars…"));
 
 squareOffButton.addEventListener("click", async () => {
   if (!confirm("Force-close every open position right now?")) return;

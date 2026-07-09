@@ -73,6 +73,22 @@ export interface PortfolioState {
   positions: Record<string, number>;
 }
 
+export interface SessionProgress {
+  phase: "idle" | "starting" | "discovering" | "evaluating" | "executing" | "error" | string;
+  mode: "watchlist" | "replay" | null;
+  detail?: string;
+  universe_size?: number;
+  scanned?: number;
+  survived_scan?: number;
+  selected_count?: number;
+  watchlist?: string[];
+  current_symbol?: string | null;
+  symbols_completed?: number;
+  symbols_total?: number;
+  bars_played?: number;
+  max_bars?: number;
+}
+
 export interface ReportSummary {
   base_capital: number;
   base_buying_power: number;
