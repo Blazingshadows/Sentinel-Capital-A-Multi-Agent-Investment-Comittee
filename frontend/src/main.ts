@@ -36,7 +36,7 @@ app.innerHTML = `
           <input type="radio" name="execution-mode" value="manual" /> Manual
         </label>
       </div>
-      <button id="run-watchlist">Run watchlist cycle</button>
+      <button id="live-session-toggle" title="Runs continuously -- one pass every few minutes -- until you click Stop or the 15:15 IST square-off boundary is crossed">Run session</button>
       <button id="run-replay" title="Plays cached historical bars through the exact same pipeline -- for demos outside market hours">Run demo (replay)</button>
       <button id="square-off" title="Force-closes every open position right now, same as the automatic end-of-day close">Square off all</button>
     </div>
@@ -89,7 +89,7 @@ const decisionDetailEl = document.querySelector<HTMLDivElement>("#decision-detai
 const cashLedgerEl = document.querySelector<HTMLDivElement>("#cash-ledger")!;
 const tradesTableEl = document.querySelector<HTMLDivElement>("#trades-table")!;
 const statusLineEl = document.querySelector<HTMLSpanElement>("#status-line")!;
-const runButton = document.querySelector<HTMLButtonElement>("#run-watchlist")!;
+const liveToggleButton = document.querySelector<HTMLButtonElement>("#live-session-toggle")!;
 const replayButton = document.querySelector<HTMLButtonElement>("#run-replay")!;
 const squareOffButton = document.querySelector<HTMLButtonElement>("#square-off")!;
 const modeInputs = document.querySelectorAll<HTMLInputElement>('input[name="execution-mode"]');
@@ -97,6 +97,13 @@ const modeInputs = document.querySelectorAll<HTMLInputElement>('input[name="exec
 let decisions: DecisionRow[] = [];
 let selectedDecision: DecisionRow | null = null;
 const executingSymbols = new Set<string>();
+
+// Phases that mean a live session (POST /session/start) has actually ended --
+// "idle" recurs between passes while still live, so it's deliberately not here.
+const LIVE_SESSION_TERMINAL_PHASES = new Set(["stopped", "market_closed", "error"]);
+let liveSessionActive = false;
+let liveProgressTimer: number | null = null;
+let liveRefreshTimer: number | null = null;
 
 function currentExecutionMode(): ExecutionMode {
   return (Array.from(modeInputs).find((input) => input.checked)?.value as ExecutionMode) ?? "autonomous";
@@ -168,6 +175,22 @@ async function init(): Promise<void> {
   // cleared by that symbol's next cycle or an execute click) -- so this
   // polls continuously, independent of whether a run is currently active.
   window.setInterval(pollSuggestions, 3_000);
+
+  // A live session survives a page reload (it's a server-side background
+  // task) -- resume polling instead of the dashboard looking idle while one
+  // is actually still running underneath it.
+  try {
+    const progress = await api.sessionProgress();
+    if (progress.mode === "live" && !LIVE_SESSION_TERMINAL_PHASES.has(progress.phase)) {
+      liveSessionActive = true;
+      liveToggleButton.textContent = "Stop session";
+      setModeControlsDisabled(true);
+      renderProgressPanel(progressPanelEl, progress);
+      beginLiveSessionPolling();
+    }
+  } catch {
+    // Backend unreachable already surfaced above.
+  }
 }
 
 // Both a watchlist cycle and a replay session run for real (real Breeze
@@ -179,7 +202,7 @@ async function init(): Promise<void> {
 // update as each trade lands (see loop.run_watchlist_once's per-trade
 // snapshot).
 async function runWithProgress(action: () => Promise<unknown>, label: string): Promise<void> {
-  runButton.disabled = true;
+  liveToggleButton.disabled = true;
   replayButton.disabled = true;
   statusLineEl.textContent = label;
 
@@ -210,14 +233,91 @@ async function runWithProgress(action: () => Promise<unknown>, label: string): P
     }
     await refresh();
     await pollSuggestions();
-    runButton.disabled = false;
+    liveToggleButton.disabled = false;
     replayButton.disabled = false;
   }
 }
 
-runButton.addEventListener("click", () => {
+function setModeControlsDisabled(disabled: boolean): void {
+  modeInputs.forEach((input) => (input.disabled = disabled));
+  replayButton.disabled = disabled;
+}
+
+// A live session (POST /session/start) is a fire-and-forget background task
+// on the server -- unlike a one-shot watchlist/replay pass, this call
+// returns immediately while the session keeps running for minutes to hours.
+// So instead of runWithProgress's "poll until the single awaited call
+// resolves" pattern, this polls indefinitely until the session itself
+// reports a terminal phase (user-stopped, market-closed, or error).
+function beginLiveSessionPolling(): void {
+  liveProgressTimer = window.setInterval(async () => {
+    try {
+      const progress = await api.sessionProgress();
+      renderProgressPanel(progressPanelEl, progress);
+      if (progress.mode === "live" && LIVE_SESSION_TERMINAL_PHASES.has(progress.phase)) {
+        const closedByMarket = progress.phase === "market_closed";
+        await endLiveSession(closedByMarket ? (progress.detail ?? "Market closed.") : undefined);
+      }
+    } catch {
+      // Transient poll failure -- next tick will retry; not worth surfacing.
+    }
+  }, 1_000);
+  liveRefreshTimer = window.setInterval(() => {
+    refresh();
+    pollSuggestions();
+  }, 3_000);
+}
+
+function stopLiveSessionPolling(): void {
+  if (liveProgressTimer !== null) window.clearInterval(liveProgressTimer);
+  if (liveRefreshTimer !== null) window.clearInterval(liveRefreshTimer);
+  liveProgressTimer = null;
+  liveRefreshTimer = null;
+}
+
+async function endLiveSession(statusOverride?: string): Promise<void> {
+  stopLiveSessionPolling();
+  liveSessionActive = false;
+  liveToggleButton.textContent = "Run session";
+  liveToggleButton.disabled = false;
+  setModeControlsDisabled(false);
+  await refresh();
+  await pollSuggestions();
+  statusLineEl.textContent = statusOverride ?? `Live session stopped: ${new Date().toLocaleTimeString("en-IN")}`;
+}
+
+async function startLiveSession(): Promise<void> {
   const mode = currentExecutionMode();
-  runWithProgress(() => api.runWatchlist(mode), `Running watchlist cycle (${mode})…`);
+  liveToggleButton.disabled = true;
+  statusLineEl.textContent = `Starting live session (${mode})…`;
+  try {
+    await api.startLiveSession(mode);
+  } catch (error) {
+    statusLineEl.textContent = `Failed to start live session: ${(error as Error).message}`;
+    liveToggleButton.disabled = false;
+    return;
+  }
+  liveSessionActive = true;
+  liveToggleButton.textContent = "Stop session";
+  liveToggleButton.disabled = false;
+  setModeControlsDisabled(true);
+  statusLineEl.textContent = `Live session running (${mode}) — trading Discovery's top-ranked watchlist every few minutes until stopped or 15:15 IST.`;
+  beginLiveSessionPolling();
+}
+
+liveToggleButton.addEventListener("click", async () => {
+  if (!liveSessionActive) {
+    await startLiveSession();
+    return;
+  }
+  liveToggleButton.disabled = true;
+  statusLineEl.textContent = "Stopping live session…";
+  try {
+    await api.stopLiveSession();
+  } catch (error) {
+    statusLineEl.textContent = `Failed to stop live session cleanly: ${(error as Error).message}`;
+  }
+  await endLiveSession();
 });
 
 replayButton.addEventListener("click", () => {

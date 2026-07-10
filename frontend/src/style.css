@@ -392,6 +392,12 @@ tr.ledger-total td {
   background: color-mix(in srgb, var(--status-good) 14%, transparent);
 }
 
+.progress-phase.phase-market_closed,
+.progress-phase.phase-stopped {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, transparent);
+}
+
 .progress-mode {
   font-size: 11px;
   color: var(--text-muted);

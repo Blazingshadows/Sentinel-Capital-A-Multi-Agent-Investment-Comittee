@@ -40,6 +40,9 @@ export const api = {
         (secondsPerTick !== undefined ? `&seconds_per_tick=${secondsPerTick}` : ""),
     ),
   squareOff: () => postJson<unknown[]>("/session/square-off"),
+  startLiveSession: (executionMode: ExecutionMode = "autonomous") =>
+    postJson<{ status: string }>(`/session/start?execution_mode=${executionMode}`),
+  stopLiveSession: () => postJson<{ status: string }>("/session/stop"),
   sessionProgress: () => getJson<SessionProgress>("/session/progress"),
   suggestions: () => getJson<Suggestion[]>("/suggestions"),
   executeSuggestion: (symbol: string) => postJson<SuggestionExecuteResult>(`/suggestions/${symbol}/execute`),
