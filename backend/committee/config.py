@@ -218,3 +218,11 @@ FORECAST_DEADZONE_MIN_RETURN = 0.0005  # floor so a near-zero rolling vol can't 
 FORECAST_TRAIN_PERIOD = "180d"  # Breeze has no 60d cap (yfinance did); can grow toward its ~3yr retention later
 FORECAST_TRAIN_INTERVAL = "5m"  # Breeze's get_historical_data_v2 has no native 15m bucket
 FORECAST_MIN_TRAINING_ROWS = 500
+
+# --- Concurrency --------------------------------------------------------
+# Bounded worker count for a watchlist pass's parallel fetch/evaluate phases
+# (orchestration/loop.run_watchlist_once). Each worker makes a Breeze
+# historical-data call and, during evaluation, up to three different LLM
+# providers' API calls -- this caps how many concurrent requests hit any one
+# provider at once, not just a thread count for its own sake.
+COMMITTEE_EVAL_WORKERS = 6

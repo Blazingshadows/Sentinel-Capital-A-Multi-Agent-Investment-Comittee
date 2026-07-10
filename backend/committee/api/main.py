@@ -156,6 +156,7 @@ def trigger_watchlist(request: Request, execution_mode: str = "autonomous") -> l
         logs = run_watchlist_once(
             session, request.app.state.portfolio, progress=request.app.state.progress,
             execution_mode=execution_mode, suggestions=request.app.state.suggestions,
+            session_factory=request.app.state.session_factory,
         )
         return [log.model_dump(mode="json") for log in logs]
     finally:

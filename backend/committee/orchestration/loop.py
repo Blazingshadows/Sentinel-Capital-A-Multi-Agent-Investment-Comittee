@@ -10,13 +10,17 @@ once all of them have a fresh price for this pass).
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from backend.committee.config import (
+    BASE_EXPERTISE,
+    COMMITTEE_EVAL_WORKERS,
     SESSION_SQUARE_OFF,
     SESSION_START,
     STOP_LOSS_PCT,
@@ -27,7 +31,7 @@ from backend.committee.config import (
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.market_data.context import MarketContext, build_context
 from backend.committee.orchestration.allocator import AllocationCandidate, allocate_capital
-from backend.committee.orchestration.cycle import evaluate_context, finalize_cycle
+from backend.committee.orchestration.cycle import finalize_cycle, run_specialists
 from backend.committee.persistence import repository
 from backend.committee.risk import manager as risk_manager
 from backend.committee.schemas import (
@@ -40,6 +44,7 @@ from backend.committee.schemas import (
     RiskVerdict,
     Suggestion,
 )
+from backend.committee.trust.scoring import refresh_trust_scores
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +159,9 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
                         context_flags: list[str] | None = None,
                         context_provider: Callable[[str], MarketContext] | None = None,
                         progress: dict | None = None, execution_mode: str = "autonomous",
-                        suggestions: dict[str, Suggestion] | None = None) -> list[DecisionLog]:
+                        suggestions: dict[str, Suggestion] | None = None,
+                        session_factory: Callable[[], Session] | None = None,
+                        max_workers: int = COMMITTEE_EVAL_WORKERS) -> list[DecisionLog]:
     """`context_provider(symbol) -> MarketContext` overrides the default live
     Breeze fetch -- Replay Mode's only hook into this function, so a replay
     pass runs through the *exact* same allocator/stop-loss/cross-symbol-
@@ -162,10 +169,31 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
     that could silently drift out of sync with it (or reintroduce the
     allocator-bypass bug an earlier, simpler Replay Mode had).
 
+    Per-symbol data fetch and, separately, per-symbol agent evaluation each
+    run on a bounded thread pool (`max_workers`) rather than one symbol at a
+    time -- both are dominated by waiting on the network (a Breeze
+    historical-data call; three different LLM providers' calls), so
+    wall-clock time for a full pass scales down roughly linearly with worker
+    count instead of linearly with watchlist size. Evaluation only
+    parallelizes when `session_factory` is given, since each worker needs
+    its own SQLAlchemy `Session` -- sharing one `Session` across threads is
+    unsafe. Without it, evaluation falls back to fully sequential using the
+    single `session` passed in. Prediction-outcome backfill and trust-score
+    refresh happen once, sequentially, on the main `session` between the two
+    parallel phases (previously redone from scratch for every single symbol
+    -- redundant, and also a DB write that isn't safe to run concurrently).
+    Execution afterwards stays fully sequential on `session`: it's cheap
+    (no network/LLM calls) and, per-trade portfolio snapshots aside, this is
+    also where the cross-symbol capital allocator's decisions get written,
+    so keeping it single-threaded avoids ever needing to reason about
+    concurrent writes to shared `portfolio` state.
+
     `progress`, if given, is mutated in place (current_symbol/
-    symbols_completed/symbols_total) so a caller polling it from another
-    coroutine (the API layer) can show real per-symbol status instead of the
-    dashboard looking frozen for however long a full pass takes.
+    symbols_completed/symbols_total) under a lock so a caller polling it
+    from another coroutine (the API layer) can show real progress instead of
+    the dashboard looking frozen for however long a full pass takes; with
+    several symbols in flight at once, `current_symbol` reflects whichever
+    one most recently finished, not a strict left-to-right march.
 
     `execution_mode="manual"` defers actionable decisions (BUY/SELL/SWITCH
     with nonzero approved allocation) instead of auto-executing them: each
@@ -179,27 +207,77 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
     decision the committee has since moved off of."""
     cycle_ts = datetime.now(timezone.utc)
     fetch_context = context_provider or (lambda symbol: build_context(symbol, context_flags=context_flags))
-    evaluations = []
+    workers = max(1, max_workers)
+    progress_lock = threading.Lock()
+
+    def _bump_progress(symbol: str, verb: str) -> None:
+        if progress is None:
+            return
+        with progress_lock:
+            progress["current_symbol"] = symbol
+            progress["symbols_completed"] += 1
+            progress["detail"] = f"{verb} {symbol} ({progress['symbols_completed']}/{len(watchlist)})..."
+
+    if progress is not None:
+        progress["phase"] = "fetching"
+        progress["symbols_total"] = len(watchlist)
+        progress["symbols_completed"] = 0
+        progress["detail"] = f"Fetching market data for {len(watchlist)} symbols..."
+
+    contexts: dict[str, MarketContext] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(fetch_context, symbol): symbol for symbol in watchlist}
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                contexts[symbol] = future.result()
+            except Exception:
+                logger.exception("Context fetch failed for %s — skipping this stock this pass.", symbol)
+            _bump_progress(symbol, "Fetched")
+
+    # Backfill is symbol-scoped (needs each symbol's just-fetched price) but
+    # cheap and DB-only, so it stays a plain sequential loop; trust refresh
+    # is committee-wide, so it only needs to run once per cycle, not once
+    # per symbol.
+    for symbol, context in contexts.items():
+        repository.backfill_prediction_outcomes(session, symbol, before=cycle_ts, current_price=context.latest_price)
+    refresh_trust_scores(session, list(BASE_EXPERTISE))
 
     if progress is not None:
         progress["phase"] = "evaluating"
-        progress["symbols_total"] = len(watchlist)
         progress["symbols_completed"] = 0
+        progress["detail"] = f"Evaluating {len(contexts)} symbols..."
 
-    for symbol in watchlist:
-        if progress is not None:
-            progress["current_symbol"] = symbol
-            progress["detail"] = f"Evaluating {symbol} ({progress['symbols_completed'] + 1}/{len(watchlist)})..."
+    evaluations = []
+
+    def _evaluate_one(symbol: str, context: MarketContext) -> tuple:
+        worker_session = session_factory()
         try:
-            context = fetch_context(symbol)
             current_position = portfolio.positions.get(symbol, 0.0)
-            consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts, current_position)
-            evaluations.append((context, consensus, risk_verdict, revised_recommendations))
-        except Exception:
-            logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
+            consensus, risk_verdict, revised_recommendations = run_specialists(worker_session, context, current_position)
+            return context, consensus, risk_verdict, revised_recommendations
         finally:
-            if progress is not None:
-                progress["symbols_completed"] += 1
+            worker_session.close()
+
+    if session_factory is not None:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_evaluate_one, symbol, context): symbol for symbol, context in contexts.items()}
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    evaluations.append(future.result())
+                except Exception:
+                    logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
+                _bump_progress(symbol, "Evaluated")
+    else:
+        for symbol, context in contexts.items():
+            try:
+                current_position = portfolio.positions.get(symbol, 0.0)
+                consensus, risk_verdict, revised_recommendations = run_specialists(session, context, current_position)
+                evaluations.append((context, consensus, risk_verdict, revised_recommendations))
+            except Exception:
+                logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
+            _bump_progress(symbol, "Evaluated")
 
     evaluations = _apply_stop_loss(evaluations, portfolio)
     evaluations = _apply_cross_symbol_comparison(evaluations, portfolio)
@@ -358,6 +436,7 @@ async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str
                 await asyncio.to_thread(
                     run_watchlist_once, session, portfolio, session_watchlist,
                     progress=progress, execution_mode=execution_mode, suggestions=suggestions,
+                    session_factory=session_factory,
                 )
             finally:
                 session.close()
