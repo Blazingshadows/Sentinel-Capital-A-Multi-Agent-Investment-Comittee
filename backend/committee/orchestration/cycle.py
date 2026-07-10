@@ -28,16 +28,22 @@ from backend.committee.schemas import AgentOutput, ConsensusDecision, DecisionLo
 from backend.committee.trust.scoring import refresh_trust_scores
 
 
-def evaluate_context(
-    session: Session, context: MarketContext, cycle_ts: datetime, current_position: float = 0.0
+def run_specialists(
+    session: Session, context: MarketContext, current_position: float = 0.0
 ) -> tuple[ConsensusDecision, RiskVerdict, list[AgentOutput]]:
-    """Agents through Risk — no capital committed, no trade executed yet.
+    """Agents through Risk only — assumes this cycle's prediction-outcome
+    backfill and trust-score refresh have already happened (see
+    `evaluate_context`, or `orchestration.loop.run_watchlist_once`, which
+    does both once for the whole watchlist rather than once per symbol
+    before calling this directly). Split out from `evaluate_context` so a
+    multi-symbol pass can run this — the expensive part, up to three
+    different LLM providers' calls plus the local forecasting model — on a
+    thread pool across symbols, while the DB backfill/refresh stays a single
+    sequential step (redoing trust refresh per symbol was pure waste, and a
+    write that isn't safe to run concurrently against one SQLite file).
     `current_position` (this symbol's existing qty, signed) is only used to
     let the Consensus layer distinguish HOLD from WAIT; it never reaches the
     specialist agents, which reason about the stock in isolation."""
-    repository.backfill_prediction_outcomes(session, context.symbol, before=cycle_ts, current_price=context.latest_price)
-    refresh_trust_scores(session, list(BASE_EXPERTISE))
-
     original_recommendations = [
         technical.analyze(context),
         news_sentiment.analyze(context),
@@ -50,6 +56,18 @@ def evaluate_context(
     risk_verdict = risk_manager.evaluate(context, consensus)
 
     return consensus, risk_verdict, debate.revised_recommendations
+
+
+def evaluate_context(
+    session: Session, context: MarketContext, cycle_ts: datetime, current_position: float = 0.0
+) -> tuple[ConsensusDecision, RiskVerdict, list[AgentOutput]]:
+    """Agents through Risk — no capital committed, no trade executed yet.
+    Single-symbol convenience wrapper around `run_specialists` that also
+    does this cycle's backfill/trust-refresh itself; watchlist passes do
+    those once for every symbol instead (see `run_specialists`)."""
+    repository.backfill_prediction_outcomes(session, context.symbol, before=cycle_ts, current_price=context.latest_price)
+    refresh_trust_scores(session, list(BASE_EXPERTISE))
+    return run_specialists(session, context, current_position)
 
 
 def finalize_cycle(

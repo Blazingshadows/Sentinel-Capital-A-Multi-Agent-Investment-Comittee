@@ -41,12 +41,12 @@ def _patch_pipeline(monkeypatch, contexts: dict[str, MarketContext], decisions: 
     def fake_build_context(symbol, **kwargs):
         return contexts[symbol]
 
-    def fake_evaluate_context(session, context, cycle_ts, current_position=0.0):
+    def fake_run_specialists(session, context, current_position=0.0):
         consensus, risk_verdict = decisions[context.symbol]
         return consensus, risk_verdict, []
 
     monkeypatch.setattr(loop_module, "build_context", fake_build_context)
-    monkeypatch.setattr(loop_module, "evaluate_context", fake_evaluate_context)
+    monkeypatch.setattr(loop_module, "run_specialists", fake_run_specialists)
 
 
 def test_manual_mode_defers_actionable_and_finalizes_hold(db_session, monkeypatch):

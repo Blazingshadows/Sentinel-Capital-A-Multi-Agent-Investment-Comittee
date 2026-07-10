@@ -167,6 +167,7 @@ async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: l
                 run_watchlist_once, session, portfolio, active_watchlist,
                 context_provider=lambda s: contexts_this_tick[s], progress=progress,
                 execution_mode=execution_mode, suggestions=suggestions,
+                session_factory=session_factory,
             )
         except Exception:
             logger.exception("Replay tick failed.")
