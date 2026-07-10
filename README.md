@@ -355,32 +355,6 @@ This prevents static voting and enables adaptive, non-uniform committee behavior
 
 ---
 
-# Success Criteria
-
-## Minimum Viable Success
-- All 8 mandatory AI/ML tool categories represented (custom-built, not solely API wrappers)
-- Structured debate workflow
-- Directional Confidence-Aware Consensus generation (no majority vote / averaging)
-- Risk manager approval layer enforcing ₹10,000 capital and 1:2 leverage
-- Intraday paper trading execution on NSE/BSE
-- Explainable trade logs, including full per-trade report fields
-
-## Good Success
-- Full 6-factor dynamic trust/influence scoring
-- Historical performance tracking
-- Portfolio allocation recommendations across the 5-action decision space (incl. SWITCH)
-- Interactive committee dashboard
-- All positions verifiably closed before market close each session
-
-## Excellent Success
-- Adaptive trust updates
-- Multi-stock portfolio management with live SWITCH decisions
-- Historical replay evaluation
-- Fully explainable committee reasoning for every trade **and** every no-trade (WAIT/HOLD)
-- Real-time paper trading demonstration with complete decision log and cost-adjusted P&L
-
----
-
 # Demo Scenario
 
 ## Input
