@@ -23,6 +23,20 @@ class Portfolio:
     # for a single-session demo; would need its own persisted column to
     # survive restarts.
 
+    def reset(self) -> None:
+        """Back to flat/full-cash in place (not a new instance -- callers
+        like `app.state.portfolio` hold a reference to this exact object).
+        Every Replay Mode run rebuilds its `ReplayFeed`s from the start of
+        the cached window (see replay/player.py), so a position/cost-basis
+        left over from a previous replay run would get marked against
+        whatever price that same starting bar has -- a different point in
+        simulated time than where the position was actually opened. Call
+        this before a fresh replay run starts so its price feed and its
+        portfolio state always describe the same simulated timeline."""
+        self.cash = CAPITAL
+        self.positions.clear()
+        self.entry_prices.clear()
+
     def mark_to_market(self, prices: dict[str, float]) -> PortfolioSnapshot:
         position_value = sum(qty * prices.get(symbol, 0.0) for symbol, qty in self.positions.items())
         portfolio_value = self.cash + position_value

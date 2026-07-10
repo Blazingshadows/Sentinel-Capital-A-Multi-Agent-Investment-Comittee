@@ -70,6 +70,7 @@ async def run_replay(session: Session, portfolio: Portfolio, symbol: str, interv
     exists to prevent, just reintroduced on the replay path. Kept here for
     single-symbol inspection only; see run_replay_session for anything that
     touches the shared portfolio across multiple symbols."""
+    portfolio.reset()
     ohlcv = load_cached_ohlcv(symbol, interval=interval)
     try:
         headlines = fetch_headlines(symbol)
@@ -119,6 +120,16 @@ async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: l
     cancelled -- mirrors `run_session`'s cancellation contract exactly, so
     the API layer can start/stop it the same way.
 
+    Resets `portfolio` to flat/full-cash up front: every `ReplayFeed` here
+    restarts each symbol from the same cached bar 50 regardless of how far a
+    previous replay run advanced it, so a position left over from an earlier
+    run would otherwise get marked-to-market against a bar from a completely
+    different point in that symbol's simulated history -- e.g. a position
+    costed at a much-later, much-higher cached price instantly "loses" 30%+
+    against this run's opening bar, a paper loss that never actually
+    happened. `portfolio` is reset in place (not rebound) since the caller
+    (the API layer's `app.state.portfolio`) holds the same reference.
+
     `use_discovery=True` runs Opportunity Discovery once up front, same as
     a live session, so a demo replay exercises the same watchlist-selection
     path being judged rather than a fixed 10-symbol list.
@@ -133,6 +144,7 @@ async def run_replay_session(session_factory, portfolio: Portfolio, watchlist: l
     `run_watchlist_once` -- see its docstring. In manual mode a symbol's
     suggestion naturally gets superseded by its own next tick here, same as
     a live session's next cycle."""
+    portfolio.reset()
     session_watchlist = watchlist
     if use_discovery:
         from backend.committee.orchestration.watchlist import select_session_watchlist
