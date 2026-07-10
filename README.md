@@ -443,20 +443,22 @@ the map from problem-statement language to real code.
 | Time-Series / DL Forecasting | Implemented — LightGBM classifier, offline-trained | `backend/committee/agents/forecasting.py`, `scripts/train_forecasting_model.py` |
 | Policy & Geopolitical Impact | Implemented — LLM-backed (OpenAI) Macro agent | `backend/committee/agents/macro.py` |
 | Contrarian / cross-cutting challenger | Implemented — LLM-backed (Anthropic), dual role in the Debate Layer | `backend/committee/debate/contrarian.py`, `debate/engine.py` |
-| Opportunity Discovery | Implemented — separate subsystem: scan → score → diversify over the NSE universe | `backend/committee/discovery/` (`docs/agents.md` §Opportunity Discovery) |
+| Opportunity Discovery | Implemented — scan → score → diversify over a 233-symbol NSE universe (229 live-fetchable via Breeze), wired into session watchlist selection at the start of every autonomous/replay run | `backend/committee/discovery/`, `orchestration/watchlist.py` (`docs/agents.md` §Opportunity Discovery) |
 | Fundamental Analysis | Partial — static sector/market-cap table feeds the Macro agent's prompt; no dedicated agent (Breeze has no fundamentals endpoint) | `config.WATCHLIST_FUNDAMENTALS` |
 | Sector Intelligence | Partial — sector-relative-strength is one of Discovery's 11 scoring factors; no dedicated live agent | `discovery/scoring.py` (`sector_strength` factor) |
 | Risk Prediction | Implemented as the Risk Management Layer's own GARCH(1,1) volatility check, not a separate specialist vote | `backend/committee/risk/volatility.py`, `risk/manager.py` |
 | Directional Confidence-Aware Consensus (no majority vote/averaging) | Implemented — `Confidence x Trust x Context Relevance`, normalized across the committee | `backend/committee/consensus/orchestrator.py`, `trust/scoring.py` |
 | Debate Layer (independent → challenge → revise) | Implemented as one deterministic confidence-damping pass, not further LLM calls | `backend/committee/debate/engine.py` |
 | Dynamic Trust Framework | Implemented — Laplace-smoothed historical reliability + context relevance; expertise folded into context relevance, agreement handled by the Debate Layer | `backend/committee/trust/scoring.py` |
-| Risk Management (₹10,000 / 1:2 leverage) | Implemented — position cap, volatility trim/reject, cross-symbol capital allocator | `backend/committee/risk/manager.py`, `orchestration/allocator.py` |
+| Risk Management (₹10,000 / 1:2 leverage) | Implemented — position cap, volatility trim/reject, cross-symbol capital allocator, plus a hard 3% stop-loss that force-closes a held position next cycle regardless of the committee's directional view | `backend/committee/risk/manager.py`, `orchestration/allocator.py`, `orchestration/loop.py::_apply_stop_loss`, `config.STOP_LOSS_PCT` |
 | Execution + real NSE costs | Implemented — brokerage/STT/exchange/SEBI/stamp-duty/GST/slippage, delta-sized orders | `backend/committee/execution/` |
-| Forced closure before market close | Not yet enforced automatically — `SESSION_SQUARE_OFF` (15:15 IST) is configured but no scheduled square-off job exists yet | `config.SESSION_SQUARE_OFF` |
+| Forced closure before market close | Implemented — the watchlist loop auto-flattens every open position the instant it crosses the `SESSION_SQUARE_OFF` (15:15 IST) boundary, plus an on-demand `POST /session/square-off` for demoing the control outside that window | `orchestration/loop.py::square_off_all_positions`, `orchestration/loop.py::run_forever` |
 | Explainable per-trade audit log | Implemented — every cycle (trade or no-trade) persisted with full agent/debate/consensus/risk detail | `backend/committee/persistence/`, `audit/report.py` |
-| Interactive dashboard | Implemented — Vite + TypeScript, portfolio curve, decision drill-down, trade log, session run/stop control | `frontend/` |
-| Historical replay evaluation | Implemented — bar-by-bar replay through the exact same pipeline | `backend/committee/replay/player.py` |
-| Baseline comparison | Implemented — vectorbt SMA-crossover, matched cash/costs/methodology | `backend/committee/baseline/`, `scripts/compare_baseline.py` |
+| Manual mode (human-in-the-loop execution) | Implemented — `execution_mode="manual"` defers BUY/SELL/SWITCH decisions to a suggestion queue instead of auto-executing; a human clicks Execute in the dashboard, which re-fetches the price fresh at click time rather than trading at the (possibly stale) suggested price | `api/main.py` (`/suggestions`, `/suggestions/{symbol}/execute`), `schemas.Suggestion`, `orchestration/loop.py::run_watchlist_once` |
+| Interactive dashboard | Implemented — Vite + TypeScript, portfolio curve, decision drill-down, trade log, session run/stop control, autonomous/manual mode toggle with suggestion cards, and live progress polling (discovering/evaluating/executing/replay-tick phases) while a watchlist or replay pass is running | `frontend/` |
+| Historical replay evaluation | Implemented — bar-by-bar replay through the exact same allocator/stop-loss/cross-symbol path live trading uses, not a parallel implementation | `backend/committee/replay/player.py` |
+| Baseline comparison | Implemented — vectorbt SMA-crossover, matched cash/costs/methodology, parallelized one symbol per worker process | `backend/committee/baseline/`, `scripts/compare_baseline.py` |
+| Performance (multi-symbol passes) | Implemented — per-symbol OHLCV fetch and agent evaluation within a watchlist pass are parallelized (`ThreadPoolExecutor`), not looped serially | `orchestration/loop.py` |
 
 ## Tech stack
 
@@ -466,14 +468,202 @@ the map from problem-statement language to real code.
 - **Frontend:** Vite + vanilla TypeScript, no framework
 - **Testing:** pytest, an in-memory SQLite fixture, and a vectorbt-based baseline comparison
 
-## Getting started
+---
+
+# Setup & Execution
+
+This is a condensed, copy-pasteable version of the full walkthrough in
+[docs/setup.md](docs/setup.md) — read that file for the "why" behind each
+step (e.g. why Breeze needs a daily login, what each config knob does).
+
+## 1. Prerequisites
+
+- Python 3.11+
+- Node.js 18+ (for the dashboard)
+- An [ICICI Direct Breeze API](https://api.icicidirect.com/apiuser/home) app
+  — required for live market data. Without it, `fetch_ohlcv` falls back to
+  whatever's already cached in `data/historical/*.csv`, which is enough for
+  Replay Mode and offline development but not for a live symbol that's
+  never been fetched before.
+- API keys for **Gemini**, **OpenAI**, and **Anthropic** — each LLM-backed
+  agent (News & Sentiment, Macro, Contrarian) degrades to a neutral WAIT if
+  its key is missing, so the committee still runs without all three, just
+  with fewer live opinions.
+
+## 2. Install dependencies
 
 ```bash
+git clone <this-repo-url>
+cd "Investment Committee"
+
+# Backend (installs FastAPI, SQLAlchemy, pandas/numpy/scikit-learn, arch,
+# breeze-connect, lightgbm, vectorbt, and the three LLM SDKs, plus
+# pytest/pytest-asyncio via the [dev] extra)
 pip install -e ".[dev]"
-cp .env.example .env   # fill in LLM keys + Breeze credentials
-uvicorn backend.committee.api.main:app --reload --port 8000
-cd frontend && npm install && npm run dev
+
+# Frontend
+cd frontend
+npm install
+cd ..
 ```
 
-Full instructions, including the Breeze daily login flow and training the
-Forecasting model, are in `docs/setup.md`.
+## 3. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```
+GEMINI_API_KEY=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+NEWSAPI_KEY=
+DATABASE_URL=sqlite:///./data/committee.db
+
+BREEZE_API_KEY=
+BREEZE_API_SECRET=
+BREEZE_SESSION_TOKEN=
+```
+
+`BREEZE_API_KEY` / `BREEZE_API_SECRET` are static — generate them once from
+your app at https://api.icicidirect.com/apiuser/home ("View Apps").
+
+`BREEZE_SESSION_TOKEN` is **not** static: SEBI requires a manual browser
+login every trading day. Each morning before running the committee against
+live data:
+
+1. Log in at https://api.icicidirect.com/apiuser/home.
+2. Copy the `api_session` value from the redirect URL.
+3. Paste it into `BREEZE_SESSION_TOKEN` in `.env`.
+4. If a running process (e.g. `uvicorn`) already started with the old
+   token, restart it — the session is cached for the process lifetime, so
+   an `.env` edit alone won't pick up the refreshed token. The token
+   expires at midnight regardless.
+
+If you see `BreezeAuthError` at runtime, this daily refresh is almost
+always the cause.
+
+## 4. Train the Forecasting agent's model (optional, recommended)
+
+The Forecasting agent returns `WAIT` for every call until a model exists:
+
+```bash
+python scripts/train_forecasting_model.py
+```
+
+Pulls 180 days of 5-minute OHLCV per watchlist symbol via Breeze, builds
+lagged/indicator/volatility features, and trains a LightGBM classifier,
+writing `data/models/forecasting_lgbm.txt` and
+`data/models/forecasting_meta.json`. Re-run periodically as more history
+accumulates.
+
+## 5. Run the backend
+
+```bash
+uvicorn backend.committee.api.main:app --reload --port 8000
+```
+
+This creates `data/committee.db` (SQLite) on first run. Smoke-test it:
+
+```bash
+curl http://127.0.0.1:8000/health
+curl -X POST http://127.0.0.1:8000/cycle/INFY
+```
+
+Full endpoint reference (session control, discovery, suggestions, reports,
+etc.) is in [docs/api.md](docs/api.md).
+
+## 6. Run the dashboard
+
+In a second terminal:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Opens on `http://localhost:5173`, talking to the backend on
+`127.0.0.1:8000` (CORS is pre-scoped to `localhost`/`127.0.0.1` in
+`api/main.py`). From the dashboard:
+
+- **Run session** — starts a continuous watchlist loop: Opportunity
+  Discovery selects the traded watchlist once at session start, then one
+  evaluation pass every 5 minutes during NSE hours (09:15–15:30 IST),
+  idle-polling outside them, with all open positions force-flattened the
+  instant the session crosses 15:15 IST.
+- **Autonomous / Manual toggle** — autonomous auto-executes every
+  BUY/SELL/SWITCH; manual instead queues each as a suggestion card you
+  approve, executing at a freshly re-fetched price when you click it.
+- **Replay Mode** — for demoing outside market hours; plays cached
+  historical bars through the identical live pipeline (same allocator,
+  stop-loss, and cross-symbol comparison), with a progress bar over
+  `bars_played`/`max_bars`.
+- Live progress (discovering → evaluating → executing) is polled from
+  `GET /session/progress` while any watchlist or replay pass is running.
+
+## 7. Run tests
+
+```bash
+pytest backend/committee/tests
+```
+
+Covers consensus math, the debate revision pass, trust scoring, risk
+verdicts (including the stop-loss), execution/cost-model, the capital
+allocator, manual-mode suggestions, the Breeze client (mocked), the OHLCV
+cache, forecasting feature/label construction, the P&L report, and a full
+demo scenario end to end.
+
+## 8. Compare against the baseline
+
+```bash
+python scripts/compare_baseline.py
+```
+
+Runs the committee (via Replay Mode, against cached OHLCV) side-by-side
+with a plain vectorbt SMA-crossover strategy, one watchlist symbol at a
+time (matched starting cash, matched cost assumptions, same stats
+methodology), parallelized one symbol per worker process, and reports the
+average performance delta across symbols.
+
+## Repository layout
+
+```
+backend/committee/
+  agents/          Technical, News & Sentiment, Macro, Forecasting
+  api/             FastAPI app (main.py)
+  audit/           P&L reporting (report.py)
+  baseline/        vectorbt SMA-crossover comparison + shared stats
+  config.py        every tunable constant, in one place
+  consensus/       Consensus Orchestrator (Dynamic Trust Framework math)
+  debate/          Debate Layer + Contrarian agent
+  discovery/       Opportunity Discovery subsystem (own sub-package)
+  execution/       Portfolio + NSE cost model
+  llm/             Provider router + Gemini/OpenAI/Anthropic clients
+  market_data/     Breeze client, OHLCV cache, news RSS ingestion
+  nlp/             Headline cleaning
+  orchestration/   Single-cycle + watchlist-loop + cross-symbol allocator
+  persistence/     SQLAlchemy models, repository, session/engine setup
+  replay/          Replay Mode (accelerated bar-by-bar playback)
+  risk/            GARCH volatility + Risk Management Layer
+  schemas.py       every pydantic contract every layer speaks
+  tests/
+  trust/           Trust score persistence + influence-weight math
+frontend/          Vite + TypeScript dashboard (no framework)
+data/
+  historical/      accumulating per-symbol OHLCV cache (gitignored)
+  models/          trained Forecasting model artifacts (gitignored)
+  news_corpus/     cached headlines per symbol (gitignored)
+  committee.db     SQLite audit trail (gitignored)
+docs/              detailed architecture/agents/API/setup documentation
+reports/           generated business/technical briefing exports
+scripts/           train_forecasting_model.py, compare_baseline.py
+```
+
+## Further reading
+
+- **[docs/architecture.md](docs/architecture.md)** — system design, data flow, module map
+- **[docs/agents.md](docs/agents.md)** — per-agent specs (inputs, logic, outputs, failure behavior)
+- **[docs/api.md](docs/api.md)** — full REST API reference
+- **[docs/setup.md](docs/setup.md)** — the long-form version of the steps above
