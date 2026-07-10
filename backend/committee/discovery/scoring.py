@@ -151,9 +151,14 @@ class OpportunityScoringAgent(ConfigAware, AbstractOpportunityScorer):
         if not self.config.scoring.decorrelate:
             return base
 
+        # DataFrame .copy() alone isn't enough on newer pandas (copy-on-write
+        # can still hand back a read-only .values array) -- force an actual
+        # independent numpy array via to_numpy(copy=True) before
+        # fill_diagonal writes into it in place.
         corr = standardized[list(_SCORE_FACTORS)].corr().abs()
-        np.fill_diagonal(corr.values, 1.0)
-        corr = corr.fillna(0.0)
+        corr_array = corr.to_numpy(copy=True)
+        np.fill_diagonal(corr_array, 1.0)
+        corr = pd.DataFrame(corr_array, index=corr.index, columns=corr.columns).fillna(0.0)
         redundancy = corr.sum(axis=1).clip(lower=1.0)
 
         adjusted = {f: base[f] / float(redundancy[f]) for f in _SCORE_FACTORS}

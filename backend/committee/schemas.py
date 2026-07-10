@@ -219,3 +219,26 @@ class DecisionLog(BaseModel):
     consensus: ConsensusDecision
     risk_verdict: RiskVerdict
     trade: TradeRecord
+
+
+class Suggestion(BaseModel):
+    """A manual-mode committee decision awaiting a user's execute click
+    instead of auto-executing like autonomous mode does. Holds everything
+    `orchestration.cycle.finalize_cycle` needs to execute later, plus the
+    price/time it was suggested at so the API can report both that and the
+    price/time it actually executes at (which is deliberately re-fetched
+    fresh, not this `suggested_price`, at click time -- see
+    api.main's /suggestions/{symbol}/execute).
+
+    Superseded, not expired: a symbol's next cycle simply overwrites its
+    entry here (see orchestration.loop.run_watchlist_once), so a suggestion
+    can never be executed against a decision the committee has since moved
+    on from."""
+
+    symbol: str
+    consensus: ConsensusDecision
+    risk_verdict: RiskVerdict
+    revised_recommendations: list[AgentOutput]
+    suggested_price: float
+    suggested_at: datetime
+    cycle_ts: datetime

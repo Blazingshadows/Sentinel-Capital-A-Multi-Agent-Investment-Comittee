@@ -10,6 +10,7 @@ once all of them have a fresh price for this pass).
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
@@ -24,7 +25,7 @@ from backend.committee.config import (
     WATCHLIST,
 )
 from backend.committee.execution.portfolio import Portfolio
-from backend.committee.market_data.context import build_context
+from backend.committee.market_data.context import MarketContext, build_context
 from backend.committee.orchestration.allocator import AllocationCandidate, allocate_capital
 from backend.committee.orchestration.cycle import evaluate_context, finalize_cycle
 from backend.committee.persistence import repository
@@ -37,6 +38,7 @@ from backend.committee.schemas import (
     DecisionLog,
     RiskAction,
     RiskVerdict,
+    Suggestion,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,19 +151,55 @@ def _apply_cross_symbol_comparison(evaluations: list[tuple], portfolio: Portfoli
 
 
 def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
-                        context_flags: list[str] | None = None) -> list[DecisionLog]:
+                        context_flags: list[str] | None = None,
+                        context_provider: Callable[[str], MarketContext] | None = None,
+                        progress: dict | None = None, execution_mode: str = "autonomous",
+                        suggestions: dict[str, Suggestion] | None = None) -> list[DecisionLog]:
+    """`context_provider(symbol) -> MarketContext` overrides the default live
+    Breeze fetch -- Replay Mode's only hook into this function, so a replay
+    pass runs through the *exact* same allocator/stop-loss/cross-symbol-
+    comparison path a live pass does instead of a parallel implementation
+    that could silently drift out of sync with it (or reintroduce the
+    allocator-bypass bug an earlier, simpler Replay Mode had).
+
+    `progress`, if given, is mutated in place (current_symbol/
+    symbols_completed/symbols_total) so a caller polling it from another
+    coroutine (the API layer) can show real per-symbol status instead of the
+    dashboard looking frozen for however long a full pass takes.
+
+    `execution_mode="manual"` defers actionable decisions (BUY/SELL/SWITCH
+    with nonzero approved allocation) instead of auto-executing them: each
+    is written into `suggestions` (keyed by symbol, overwritten by that
+    symbol's next cycle -- see Suggestion's docstring) for a human to
+    execute later via the API layer's /suggestions/{symbol}/execute, which
+    re-fetches a fresh price at click time rather than using the price this
+    cycle evaluated at. HOLD/WAIT/rejected decisions have nothing to defer
+    and always finalize immediately in both modes, clearing any stale
+    suggestion for that symbol so it can't later be executed against a
+    decision the committee has since moved off of."""
     cycle_ts = datetime.now(timezone.utc)
+    fetch_context = context_provider or (lambda symbol: build_context(symbol, context_flags=context_flags))
     evaluations = []
 
+    if progress is not None:
+        progress["phase"] = "evaluating"
+        progress["symbols_total"] = len(watchlist)
+        progress["symbols_completed"] = 0
+
     for symbol in watchlist:
+        if progress is not None:
+            progress["current_symbol"] = symbol
+            progress["detail"] = f"Evaluating {symbol} ({progress['symbols_completed'] + 1}/{len(watchlist)})..."
         try:
-            context = build_context(symbol, context_flags=context_flags)
+            context = fetch_context(symbol)
             current_position = portfolio.positions.get(symbol, 0.0)
             consensus, risk_verdict, revised_recommendations = evaluate_context(session, context, cycle_ts, current_position)
             evaluations.append((context, consensus, risk_verdict, revised_recommendations))
         except Exception:
             logger.exception("Evaluation failed for %s — skipping this stock this pass.", symbol)
-            continue
+        finally:
+            if progress is not None:
+                progress["symbols_completed"] += 1
 
     evaluations = _apply_stop_loss(evaluations, portfolio)
     evaluations = _apply_cross_symbol_comparison(evaluations, portfolio)
@@ -172,22 +210,60 @@ def run_watchlist_once(session: Session, portfolio: Portfolio, watchlist: list[s
     ]
     adjusted_verdicts = allocate_capital(candidates, portfolio)
 
+    if progress is not None:
+        progress["phase"] = "executing"
+        progress["detail"] = "Executing approved trades..."
+
     logs: list[DecisionLog] = []
-    latest_prices: dict[str, float] = {}
+    # Seeded with every symbol evaluated this cycle *before* the execution
+    # loop starts (not grown incrementally from only-already-executed
+    # symbols) -- otherwise an early per-trade snapshot would price a
+    # held-but-not-yet-processed-this-cycle position at 0 via
+    # mark_to_market's prices.get(symbol, 0.0) fallback, understating
+    # portfolio_value until that symbol's own turn came up later in the
+    # same loop.
+    latest_prices: dict[str, float] = {context.symbol: context.latest_price for context, _, _, _ in evaluations}
 
     for context, consensus, risk_verdict, revised_recommendations in evaluations:
         final_verdict = adjusted_verdicts.get(context.symbol, risk_verdict)
+
+        is_actionable = (
+            consensus.decision in (Decision.BUY, Decision.SELL, Decision.SWITCH)
+            and final_verdict.action != RiskAction.REJECT
+            and final_verdict.approved_allocation != 0
+        )
+        if execution_mode == "manual" and suggestions is not None:
+            if is_actionable:
+                suggestions[context.symbol] = Suggestion(
+                    symbol=context.symbol,
+                    consensus=consensus,
+                    risk_verdict=final_verdict,
+                    revised_recommendations=revised_recommendations,
+                    suggested_price=context.latest_price,
+                    suggested_at=datetime.now(timezone.utc),
+                    cycle_ts=cycle_ts,
+                )
+                continue
+            # HOLD/WAIT/rejected this cycle -- nothing to suggest, and any
+            # earlier pending suggestion for this symbol is now stale.
+            suggestions.pop(context.symbol, None)
+
         try:
             log = finalize_cycle(session, portfolio, context, consensus, final_verdict, revised_recommendations, cycle_ts)
         except Exception:
             logger.exception("Execution failed for %s — skipping this stock this pass.", context.symbol)
             continue
         logs.append(log)
-        latest_prices[context.symbol] = context.latest_price
-
-    if latest_prices:
+        # Snapshot after every trade (not just once at the end of the pass)
+        # so the dashboard's value-over-time chart visibly grows as trades
+        # land instead of jumping once per whole cycle.
         snapshot = portfolio.mark_to_market(latest_prices)
         repository.insert_portfolio_snapshot(session, snapshot)
+
+    if progress is not None:
+        progress["phase"] = "idle"
+        progress["current_symbol"] = None
+        progress["detail"] = f"Cycle complete — {len(logs)} decision(s) processed."
 
     return logs
 
@@ -244,26 +320,52 @@ def square_off_all_positions(session: Session, portfolio: Portfolio) -> list[Dec
     return logs
 
 
-async def run_forever(session_factory, watchlist: list[str] = WATCHLIST, interval_seconds: int = 300,
-                       force_run_outside_market_hours: bool = False) -> None:
+async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
+                       interval_seconds: int = 300, force_run_outside_market_hours: bool = False,
+                       use_discovery: bool = True, progress: dict | None = None,
+                       execution_mode: str = "autonomous", suggestions: dict[str, Suggestion] | None = None) -> None:
     """Asyncio loop, one watchlist pass every `interval_seconds` during NSE
     market hours. `force_run_outside_market_hours` exists for Replay Mode
-    callers and local development, so the loop never has to be duplicated."""
-    portfolio = Portfolio()
+    callers and local development, so the loop never has to be duplicated.
+    `use_discovery=True` runs Opportunity Discovery once at session start to
+    pick the actual traded watchlist (see orchestration/watchlist.py);
+    `watchlist` is only used as the Discovery-disabled/Discovery-failed
+    fallback.
+
+    `portfolio` is the caller's shared instance (the API layer's
+    `app.state.portfolio`), not a fresh one built here -- other endpoints
+    (`/portfolio`, `/report`) read that same object, so a locally-created
+    Portfolio would silently desync the dashboard from what this loop is
+    actually trading.
+
+    Each pass runs via `asyncio.to_thread` -- `run_watchlist_once` is
+    synchronous and makes real, multi-second LLM/market-data calls; calling
+    it directly here would block this coroutine's event loop for the whole
+    pass, starving any concurrent request (e.g. a progress poll) until the
+    pass finishes instead of just until the next `await`."""
+    session_watchlist = watchlist
+    if use_discovery:
+        from backend.committee.orchestration.watchlist import select_session_watchlist
+
+        session_watchlist = select_session_watchlist(progress)
+
     was_market_hours = is_market_hours()
     while True:
         now_market_hours = is_market_hours()
         if force_run_outside_market_hours or now_market_hours:
             session = session_factory()
             try:
-                run_watchlist_once(session, portfolio, watchlist)
+                await asyncio.to_thread(
+                    run_watchlist_once, session, portfolio, session_watchlist,
+                    progress=progress, execution_mode=execution_mode, suggestions=suggestions,
+                )
             finally:
                 session.close()
         elif was_market_hours:
             # Just crossed the square-off boundary -- flatten everything.
             session = session_factory()
             try:
-                square_off_all_positions(session, portfolio)
+                await asyncio.to_thread(square_off_all_positions, session, portfolio)
             finally:
                 session.close()
         was_market_hours = now_market_hours

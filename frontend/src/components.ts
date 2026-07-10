@@ -1,5 +1,5 @@
 import { formatCurrency } from "./format";
-import type { DecisionRow, PortfolioState, ReportSummary, TradeRow } from "./types";
+import type { DecisionRow, PortfolioState, ReportSummary, SessionProgress, Suggestion, SuggestionExecuteResult, TradeRow } from "./types";
 
 const BADGE_CLASS: Record<string, string> = {
   BUY: "buy",
@@ -14,6 +14,99 @@ function badge(decision: string): HTMLElement {
   span.className = `badge ${BADGE_CLASS[decision] ?? "wait"}`;
   span.textContent = decision;
   return span;
+}
+
+const PHASE_LABEL: Record<string, string> = {
+  idle: "Idle",
+  starting: "Starting…",
+  discovering: "Screening universe…",
+  evaluating: "Evaluating…",
+  executing: "Executing trades…",
+  error: "Error",
+};
+
+/** Live status of a running /watchlist/run or /replay/run pass, polled from
+ * GET /session/progress -- gives the dashboard a pulse (stocks loaded,
+ * screener narrowing the universe, which symbol is being evaluated right
+ * now) instead of looking frozen for however long a full pass takes. */
+export function renderProgressPanel(container: HTMLElement, progress: SessionProgress | null): void {
+  container.innerHTML = "";
+
+  if (!progress || (progress.phase === "idle" && !progress.mode)) {
+    container.classList.add("hidden");
+    return;
+  }
+  container.classList.remove("hidden");
+
+  const header = document.createElement("div");
+  header.className = "progress-header";
+
+  const phaseEl = document.createElement("span");
+  phaseEl.className = `progress-phase phase-${progress.phase}`;
+  phaseEl.textContent = PHASE_LABEL[progress.phase] ?? progress.phase;
+  header.appendChild(phaseEl);
+
+  if (progress.mode) {
+    const modeEl = document.createElement("span");
+    modeEl.className = "progress-mode";
+    modeEl.textContent = progress.mode === "replay" ? "Replay demo" : "Watchlist cycle";
+    header.appendChild(modeEl);
+  }
+
+  const detailEl = document.createElement("span");
+  detailEl.className = "progress-detail";
+  detailEl.textContent = progress.detail ?? "";
+  header.appendChild(detailEl);
+
+  container.appendChild(header);
+
+  if (progress.watchlist && progress.watchlist.length > 0) {
+    const discoveryLine = document.createElement("div");
+    discoveryLine.className = "progress-discovery";
+    discoveryLine.textContent =
+      `${progress.universe_size ?? "?"} stocks loaded -> ${progress.survived_scan ?? "?"} passed the screen -> ` +
+      `${progress.selected_count ?? "?"} scored & diversified -> trading top ${progress.watchlist.length}: ` +
+      progress.watchlist.join(", ");
+    container.appendChild(discoveryLine);
+  }
+
+  if (progress.symbols_total) {
+    const completed = progress.symbols_completed ?? 0;
+    const pct = progress.symbols_total > 0 ? (completed / progress.symbols_total) * 100 : 0;
+
+    const track = document.createElement("div");
+    track.className = "progress-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "progress-bar-fill";
+    fill.style.width = `${pct}%`;
+    track.appendChild(fill);
+    container.appendChild(track);
+
+    const label = document.createElement("div");
+    label.className = "progress-bar-label";
+    label.textContent = progress.current_symbol
+      ? `${progress.current_symbol} (${completed}/${progress.symbols_total})`
+      : `${completed}/${progress.symbols_total} symbols`;
+    container.appendChild(label);
+  }
+
+  if (progress.max_bars) {
+    const barsPlayed = progress.bars_played ?? 0;
+    const pct = progress.max_bars > 0 ? (barsPlayed / progress.max_bars) * 100 : 0;
+
+    const track = document.createElement("div");
+    track.className = "progress-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "progress-bar-fill replay";
+    fill.style.width = `${pct}%`;
+    track.appendChild(fill);
+    container.appendChild(track);
+
+    const label = document.createElement("div");
+    label.className = "progress-bar-label";
+    label.textContent = `Replay tick ${barsPlayed}/${progress.max_bars}`;
+    container.appendChild(label);
+  }
 }
 
 export function renderStatTiles(container: HTMLElement, portfolio: PortfolioState, report: ReportSummary): void {
@@ -374,4 +467,105 @@ export function renderTradesTable(container: HTMLElement, trades: TradeRow[]): v
 
   table.appendChild(tbody);
   container.appendChild(table);
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s ago`;
+}
+
+/** Pending manual-mode decisions (GET /suggestions) awaiting an execute
+ * click. Each carries its own live "suggested Ns ago" age -- there's no
+ * fixed timeout (a suggestion is superseded by that symbol's next cycle,
+ * not a clock, see schemas.Suggestion), but the ticking age still gives a
+ * human a sense of how stale the suggested price might be getting. */
+export function renderSuggestions(
+  container: HTMLElement,
+  suggestions: Suggestion[],
+  onExecute: (symbol: string) => void,
+  pendingSymbols: Set<string>,
+): void {
+  container.innerHTML = "";
+
+  if (suggestions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No pending suggestions -- start a manual-mode run to see actionable trades here.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const sorted = [...suggestions].sort((a, b) => new Date(a.suggested_at).getTime() - new Date(b.suggested_at).getTime());
+
+  for (const s of sorted) {
+    const card = document.createElement("div");
+    card.className = "suggestion-card";
+
+    const header = document.createElement("div");
+    header.className = "suggestion-header";
+    const symbolEl = document.createElement("span");
+    symbolEl.className = "suggestion-symbol";
+    symbolEl.textContent = s.symbol;
+    header.appendChild(symbolEl);
+    header.appendChild(badge(s.consensus.decision));
+    const confidenceEl = document.createElement("span");
+    confidenceEl.className = "suggestion-confidence";
+    confidenceEl.textContent = `confidence ${s.consensus.confidence.toFixed(2)}`;
+    header.appendChild(confidenceEl);
+    card.appendChild(header);
+
+    const priceLine = document.createElement("div");
+    priceLine.className = "suggestion-price-line";
+    priceLine.textContent = `Suggested at ${formatCurrency(s.suggested_price)} -- ${timeAgo(s.suggested_at)}`;
+    card.appendChild(priceLine);
+
+    const reasoning = document.createElement("p");
+    reasoning.className = "suggestion-reasoning";
+    reasoning.textContent = s.consensus.reasoning;
+    card.appendChild(reasoning);
+
+    const footer = document.createElement("div");
+    footer.className = "suggestion-footer";
+    const allocationEl = document.createElement("span");
+    allocationEl.textContent = `Approved allocation: ${(s.risk_verdict.approved_allocation * 100).toFixed(1)}% of base capital`;
+    footer.appendChild(allocationEl);
+
+    const executeButton = document.createElement("button");
+    executeButton.className = "suggestion-execute";
+    const isPending = pendingSymbols.has(s.symbol);
+    executeButton.textContent = isPending ? "Executing…" : "Execute";
+    executeButton.disabled = isPending;
+    executeButton.addEventListener("click", () => onExecute(s.symbol));
+    footer.appendChild(executeButton);
+
+    card.appendChild(footer);
+    container.appendChild(card);
+  }
+}
+
+/** Result banner for the most recent manual-mode execution -- makes the
+ * "suggested at X, executing at Y" price movement (or lack of it) visible,
+ * since POST /suggestions/{symbol}/execute intentionally re-fetches a
+ * fresh price rather than replaying the suggested one. */
+export function renderExecutionResult(container: HTMLElement, result: (SuggestionExecuteResult & { symbol: string }) | null): void {
+  container.innerHTML = "";
+  if (!result) {
+    container.classList.add("hidden");
+    return;
+  }
+  container.classList.remove("hidden");
+
+  const priceDelta = result.executing_price - result.suggested_price;
+  const deltaText =
+    priceDelta === 0
+      ? "no price movement"
+      : `${priceDelta > 0 ? "+" : ""}${formatCurrency(priceDelta)} vs suggested`;
+
+  const line = document.createElement("div");
+  line.textContent =
+    `${result.symbol}: suggested at ${formatCurrency(result.suggested_price)} ` +
+    `(${new Date(result.suggested_at).toLocaleTimeString("en-IN")}) -> executed at ${formatCurrency(result.executing_price)} ` +
+    `(${new Date(result.executing_at).toLocaleTimeString("en-IN")}), ${deltaText}.`;
+  container.appendChild(line);
 }
