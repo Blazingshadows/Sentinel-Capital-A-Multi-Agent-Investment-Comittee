@@ -89,6 +89,8 @@ def allocate_capital(candidates: list[AllocationCandidate], portfolio: Portfolio
                 f"{final_allocation:.2f}x buying power ({share:.0%} confidence-weighted share "
                 f"of Rs {available_headroom:,.0f} available headroom)"
             ),
+            expected_return=original.expected_return,
+            expected_drawdown=original.expected_drawdown,
         )
 
     return adjusted
