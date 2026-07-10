@@ -113,8 +113,17 @@ export interface SuggestionExecuteResult {
 }
 
 export interface SessionProgress {
-  phase: "idle" | "starting" | "discovering" | "evaluating" | "executing" | "error" | string;
-  mode: "watchlist" | "replay" | null;
+  phase:
+    | "idle"
+    | "starting"
+    | "discovering"
+    | "evaluating"
+    | "executing"
+    | "stopped"
+    | "market_closed"
+    | "error"
+    | string;
+  mode: "watchlist" | "replay" | "live" | null;
   detail?: string;
   universe_size?: number;
   scanned?: number;

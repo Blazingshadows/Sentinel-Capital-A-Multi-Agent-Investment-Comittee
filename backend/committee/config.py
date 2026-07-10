@@ -186,6 +186,12 @@ SLIPPAGE_PCT_RANGE = (0.0002, 0.0005)
 SESSION_START = "09:15"
 SESSION_SQUARE_OFF = "15:15"
 
+# How often a continuous live session (POST /session/start) runs another
+# watchlist pass. Kept well above a single pass's own wall-clock time (network
+# + LLM calls across up to COMMITTEE_WATCHLIST_SIZE symbols) so passes never
+# queue up behind each other.
+LIVE_SESSION_INTERVAL_SECONDS = 300
+
 # --- LLM provider diversity ---------------------------------------------------
 # Different providers for different agents on purpose: an LLM agent's
 # reasoning is shaped by its training, not just its prompt, so routing each

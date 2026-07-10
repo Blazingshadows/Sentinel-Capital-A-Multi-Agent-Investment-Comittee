@@ -5,6 +5,7 @@ the dashboard UI itself is out of scope for this pass; this is what it would
 consume.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -12,11 +13,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
-from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE
+from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE, LIVE_SESSION_INTERVAL_SECONDS
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.market_data.context import build_context
 from backend.committee.orchestration.cycle import finalize_cycle, run_cycle
-from backend.committee.orchestration.loop import run_watchlist_once, square_off_all_positions
+from backend.committee.orchestration.loop import run_forever, run_watchlist_once, square_off_all_positions
+from backend.committee.orchestration.watchlist import select_session_watchlist
 from backend.committee.persistence import repository
 from backend.committee.persistence.db import init_db, make_engine, make_session_factory
 from backend.committee.replay.player import run_replay_session
@@ -43,6 +45,10 @@ async def lifespan(app: FastAPI):
     # schemas.Suggestion), keyed by symbol -- a symbol's next cycle
     # overwrites its own entry, and /suggestions/{symbol}/execute removes it.
     app.state.suggestions = {}
+    # A running continuous live session (POST /session/start), or None when
+    # idle -- see that endpoint and loop.run_forever.
+    app.state.live_task = None
+    app.state.live_stop_event = None
     yield
 
 
@@ -141,7 +147,15 @@ def trigger_cycle(symbol: str, request: Request) -> dict:
 
 @app.post("/watchlist/run")
 def trigger_watchlist(request: Request, execution_mode: str = "autonomous") -> list[dict]:
-    """`execution_mode="manual"` defers actionable (BUY/SELL/SWITCH)
+    """A single pass, for one-off/manual use (a continuous session should go
+    through POST /session/start instead). The traded watchlist comes from
+    Opportunity Discovery over the full live-fetchable NSE universe -- top
+    COMMITTEE_WATCHLIST_SIZE by opportunity_score, not the fixed fallback
+    `WATCHLIST` -- same selection `/session/start` uses, so a one-off run and
+    a continuous session never disagree about which symbols "live" means
+    (see orchestration/watchlist.py::select_session_watchlist).
+
+    `execution_mode="manual"` defers actionable (BUY/SELL/SWITCH)
     decisions to /suggestions instead of auto-executing them -- see
     schemas.Suggestion and loop.run_watchlist_once."""
     if execution_mode not in EXECUTION_MODES:
@@ -153,8 +167,9 @@ def trigger_watchlist(request: Request, execution_mode: str = "autonomous") -> l
     request.app.state.progress.update({"phase": "starting", "mode": "watchlist", "detail": "Starting..."})
     session = request.app.state.session_factory()
     try:
+        watchlist = select_session_watchlist(request.app.state.progress)
         logs = run_watchlist_once(
-            session, request.app.state.portfolio, progress=request.app.state.progress,
+            session, request.app.state.portfolio, watchlist, progress=request.app.state.progress,
             execution_mode=execution_mode, suggestions=request.app.state.suggestions,
             session_factory=request.app.state.session_factory,
         )
@@ -177,6 +192,69 @@ def trigger_square_off(request: Request) -> list[dict]:
         return [log.model_dump(mode="json") for log in logs]
     finally:
         session.close()
+
+
+@app.post("/session/start")
+async def start_live_session(
+    request: Request, execution_mode: str = "autonomous", interval_seconds: int = LIVE_SESSION_INTERVAL_SECONDS
+) -> dict:
+    """Starts a continuous live session: Opportunity Discovery picks the
+    traded watchlist once, then a pass runs every `interval_seconds` for as
+    long as NSE market hours hold -- until either POST /session/stop is
+    called, or the session crosses the SESSION_SQUARE_OFF (15:15 IST)
+    boundary, at which point every open position is flattened and
+    /session/progress reports phase="market_closed" (see
+    orchestration/loop.py::run_forever). Starting outside market hours ends
+    the session immediately with that same phase, rather than silently
+    trading nothing until the next open.
+
+    Runs in the background (an asyncio task), so this returns right away
+    instead of blocking for the session's whole lifetime -- poll
+    /session/progress the same way a /watchlist/run or /replay/run pass is
+    polled today. `async def` (unlike most of this file's endpoints) so
+    `asyncio.create_task` below attaches to the server's real running event
+    loop instead of a `run_in_threadpool` worker thread, which has none."""
+    if execution_mode not in EXECUTION_MODES:
+        raise HTTPException(status_code=400, detail=f"execution_mode must be one of {sorted(EXECUTION_MODES)}.")
+    if request.app.state.busy:
+        raise HTTPException(status_code=409, detail="A session is already running.")
+    request.app.state.busy = True
+    request.app.state.progress.clear()
+    request.app.state.progress.update({"phase": "starting", "mode": "live", "detail": "Starting live session..."})
+    stop_event = asyncio.Event()
+    request.app.state.live_stop_event = stop_event
+
+    async def _run() -> None:
+        try:
+            await run_forever(
+                request.app.state.session_factory, request.app.state.portfolio,
+                interval_seconds=interval_seconds, progress=request.app.state.progress,
+                execution_mode=execution_mode, suggestions=request.app.state.suggestions,
+                stop_event=stop_event,
+            )
+        finally:
+            request.app.state.busy = False
+            request.app.state.live_task = None
+            request.app.state.live_stop_event = None
+
+    request.app.state.live_task = asyncio.create_task(_run())
+    return {"status": "started"}
+
+
+@app.post("/session/stop")
+async def stop_live_session(request: Request) -> dict:
+    """Signals a running live session (POST /session/start) to stop after its
+    current pass finishes, rather than waiting out the rest of its
+    `interval_seconds` sleep -- and waits for it to actually finish (final
+    square-off bookkeeping included) before returning. No-op, not an error,
+    if no live session is currently running."""
+    stop_event = request.app.state.live_stop_event
+    task = request.app.state.live_task
+    if stop_event is None or task is None:
+        return {"status": "not_running"}
+    stop_event.set()
+    await task
+    return {"status": "stopped"}
 
 
 @app.post("/replay/run")
@@ -220,8 +298,8 @@ async def trigger_replay(
 
 @app.get("/session/progress")
 def session_progress(request: Request) -> dict:
-    """Poll target for a running /watchlist/run or /replay/run pass. Shape
-    depends on `phase`:
+    """Poll target for a running /watchlist/run, /replay/run, or
+    /session/start session. Shape depends on `phase`:
     - "idle" | "starting" | "error": just `phase`, `mode`, `detail`.
     - "discovering": + `universe_size`/`scanned`/`survived_scan`/
       `selected_count`/`watchlist` once Discovery finishes (see
@@ -230,6 +308,13 @@ def session_progress(request: Request) -> dict:
       `symbols_total`.
     - replay mode additionally carries `bars_played`/`max_bars` once ticks
       start (see replay/player.py).
+    - a live session (`mode == "live"`) cycles phase through "discovering" ->
+      "evaluating"/"executing" -> "idle" once per pass, same as a one-off
+      /watchlist/run, but keeps running -- "idle" here means "between passes,
+      still live", not "session over". The session has actually ended only
+      once phase reaches "stopped" (POST /session/stop was called) or
+      "market_closed" (crossed the 15:15 IST boundary, or started outside
+      market hours).
     All keys are best-effort -- a caller should treat any of them as
     possibly absent depending on how far the current pass has gotten."""
     return dict(request.app.state.progress)

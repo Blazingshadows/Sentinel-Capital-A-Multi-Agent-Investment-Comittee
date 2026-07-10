@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from backend.committee.config import (
     BASE_EXPERTISE,
     COMMITTEE_EVAL_WORKERS,
+    LIVE_SESSION_INTERVAL_SECONDS,
     SESSION_SQUARE_OFF,
     SESSION_START,
     STOP_LOSS_PCT,
@@ -399,16 +400,35 @@ def square_off_all_positions(session: Session, portfolio: Portfolio) -> list[Dec
 
 
 async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str] = WATCHLIST,
-                       interval_seconds: int = 300, force_run_outside_market_hours: bool = False,
+                       interval_seconds: int = LIVE_SESSION_INTERVAL_SECONDS,
+                       force_run_outside_market_hours: bool = False,
                        use_discovery: bool = True, progress: dict | None = None,
-                       execution_mode: str = "autonomous", suggestions: dict[str, Suggestion] | None = None) -> None:
-    """Asyncio loop, one watchlist pass every `interval_seconds` during NSE
-    market hours. `force_run_outside_market_hours` exists for Replay Mode
-    callers and local development, so the loop never has to be duplicated.
+                       execution_mode: str = "autonomous", suggestions: dict[str, Suggestion] | None = None,
+                       stop_event: asyncio.Event | None = None) -> None:
+    """Continuous live session: one watchlist pass every `interval_seconds`
+    during NSE market hours, ending itself -- not actually running forever --
+    the moment either condition hits:
+
+    1. `stop_event` is set (the API layer's /session/stop, a user-initiated
+       stop), checked right after every pass finishes rather than only at the
+       end of the `interval_seconds` sleep, so a stop request lands within
+       moments instead of waiting out however much of the sleep remains.
+    2. The session crosses the `SESSION_SQUARE_OFF` (15:15 IST) boundary, or
+       is started outside market hours to begin with -- either way, every
+       open position is flattened (`square_off_all_positions`) and `progress`
+       is left on the terminal phase "market_closed" so the caller can show
+       that instead of silently going idle.
+
+    `force_run_outside_market_hours` exists for Replay Mode callers and local
+    development, so the loop never has to be duplicated -- it disables the
+    market-hours gate entirely rather than just the square-off exit, since a
+    replay session has no real trading-hours boundary to honor.
+
     `use_discovery=True` runs Opportunity Discovery once at session start to
-    pick the actual traded watchlist (see orchestration/watchlist.py);
-    `watchlist` is only used as the Discovery-disabled/Discovery-failed
-    fallback.
+    pick the actual traded watchlist (see orchestration/watchlist.py) --
+    scored and diversified over the full live-fetchable NSE universe rather
+    than the fixed fallback `WATCHLIST`, which is only used if Discovery is
+    disabled or fails.
 
     `portfolio` is the caller's shared instance (the API layer's
     `app.state.portfolio`), not a fresh one built here -- other endpoints
@@ -427,10 +447,30 @@ async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str
 
         session_watchlist = select_session_watchlist(progress)
 
-    was_market_hours = is_market_hours()
-    while True:
-        now_market_hours = is_market_hours()
-        if force_run_outside_market_hours or now_market_hours:
+    def _stopped() -> bool:
+        return stop_event is not None and stop_event.is_set()
+
+    try:
+        while not _stopped():
+            if not force_run_outside_market_hours and not is_market_hours():
+                # Either the session started outside market hours, or a prior
+                # pass just crossed the square-off boundary -- either way,
+                # flatten everything (a no-op for symbols with no open
+                # position) and end the session rather than looping forever
+                # doing nothing until the next trading day.
+                session = session_factory()
+                try:
+                    await asyncio.to_thread(square_off_all_positions, session, portfolio)
+                finally:
+                    session.close()
+                if progress is not None:
+                    progress["phase"] = "market_closed"
+                    progress["detail"] = (
+                        f"Market closed (outside {SESSION_START}-{SESSION_SQUARE_OFF} IST) -- "
+                        "session ended, all positions squared off."
+                    )
+                return
+
             session = session_factory()
             try:
                 await asyncio.to_thread(
@@ -440,12 +480,26 @@ async def run_forever(session_factory, portfolio: Portfolio, watchlist: list[str
                 )
             finally:
                 session.close()
-        elif was_market_hours:
-            # Just crossed the square-off boundary -- flatten everything.
-            session = session_factory()
-            try:
-                await asyncio.to_thread(square_off_all_positions, session, portfolio)
-            finally:
-                session.close()
-        was_market_hours = now_market_hours
-        await asyncio.sleep(interval_seconds)
+
+            if _stopped():
+                break
+
+            # Wakes early on a stop request instead of always sleeping out the
+            # full interval before noticing one.
+            if stop_event is not None:
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(interval_seconds)
+
+        if progress is not None:
+            progress["phase"] = "stopped"
+            progress["detail"] = "Live session stopped."
+    except Exception:
+        logger.exception("Live session crashed.")
+        if progress is not None:
+            progress["phase"] = "error"
+            progress["detail"] = "Live session hit an unexpected error -- check server logs."
+        raise

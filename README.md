@@ -417,7 +417,7 @@ the map from problem-statement language to real code.
 | Time-Series / DL Forecasting | Implemented — LightGBM classifier, offline-trained | `backend/committee/agents/forecasting.py`, `scripts/train_forecasting_model.py` |
 | Policy & Geopolitical Impact | Implemented — LLM-backed (OpenAI) Macro agent | `backend/committee/agents/macro.py` |
 | Contrarian / cross-cutting challenger | Implemented — LLM-backed (Anthropic), dual role in the Debate Layer | `backend/committee/debate/contrarian.py`, `debate/engine.py` |
-| Opportunity Discovery | Implemented — scan → score → diversify over a 233-symbol NSE universe (229 live-fetchable via Breeze), wired into session watchlist selection at the start of every autonomous/replay run | `backend/committee/discovery/`, `orchestration/watchlist.py` (`docs/agents.md` §Opportunity Discovery) |
+| Opportunity Discovery | Implemented — scan → score → diversify over a 233-symbol NSE universe (229 live-fetchable via Breeze), wired into session watchlist selection at the start of every `/watchlist/run`, `/session/start`, and replay run — trades the top `COMMITTEE_WATCHLIST_SIZE` candidates, not the fixed fallback `WATCHLIST` | `backend/committee/discovery/`, `orchestration/watchlist.py` (`docs/agents.md` §Opportunity Discovery) |
 | Fundamental Analysis | Partial — static sector/market-cap table feeds the Macro agent's prompt; no dedicated agent (Breeze has no fundamentals endpoint) | `config.WATCHLIST_FUNDAMENTALS` |
 | Sector Intelligence | Partial — sector-relative-strength is one of Discovery's 11 scoring factors; no dedicated live agent | `discovery/scoring.py` (`sector_strength` factor) |
 | Risk Prediction | Implemented as the Risk Management Layer's own GARCH(1,1) volatility check, not a separate specialist vote | `backend/committee/risk/volatility.py`, `risk/manager.py` |
@@ -426,7 +426,7 @@ the map from problem-statement language to real code.
 | Dynamic Trust Framework | Implemented — Laplace-smoothed historical reliability + context relevance; expertise folded into context relevance, agreement handled by the Debate Layer | `backend/committee/trust/scoring.py` |
 | Risk Management (₹10,000 / 1:2 leverage) | Implemented — position cap, volatility trim/reject, cross-symbol capital allocator, plus a hard 3% stop-loss that force-closes a held position next cycle regardless of the committee's directional view | `backend/committee/risk/manager.py`, `orchestration/allocator.py`, `orchestration/loop.py::_apply_stop_loss`, `config.STOP_LOSS_PCT` |
 | Execution + real NSE costs | Implemented — brokerage/STT/exchange/SEBI/stamp-duty/GST/slippage, delta-sized orders | `backend/committee/execution/` |
-| Forced closure before market close | Implemented — the watchlist loop auto-flattens every open position the instant it crosses the `SESSION_SQUARE_OFF` (15:15 IST) boundary, plus an on-demand `POST /session/square-off` for demoing the control outside that window | `orchestration/loop.py::square_off_all_positions`, `orchestration/loop.py::run_forever` |
+| Forced closure before market close | Implemented — a running live session (`POST /session/start`) auto-flattens every open position and ends itself the instant it crosses the `SESSION_SQUARE_OFF` (15:15 IST) boundary (or if started outside market hours to begin with), reporting `phase: "market_closed"`; plus an on-demand `POST /session/square-off` for demoing the control anytime | `orchestration/loop.py::square_off_all_positions`, `orchestration/loop.py::run_forever`, `api/main.py` (`/session/start`, `/session/stop`) |
 | Explainable per-trade audit log | Implemented — every cycle (trade or no-trade) persisted with full agent/debate/consensus/risk detail | `backend/committee/persistence/`, `audit/report.py` |
 | Manual mode (human-in-the-loop execution) | Implemented — `execution_mode="manual"` defers BUY/SELL/SWITCH decisions to a suggestion queue instead of auto-executing; a human clicks Execute in the dashboard, which re-fetches the price fresh at click time rather than trading at the (possibly stale) suggested price | `api/main.py` (`/suggestions`, `/suggestions/{symbol}/execute`), `schemas.Suggestion`, `orchestration/loop.py::run_watchlist_once` |
 | Interactive dashboard | Implemented — Vite + TypeScript, portfolio curve, decision drill-down, trade log, session run/stop control, autonomous/manual mode toggle with suggestion cards, and live progress polling (discovering/evaluating/executing/replay-tick phases) while a watchlist or replay pass is running | `frontend/` |
@@ -562,11 +562,15 @@ Opens on `http://localhost:5173`, talking to the backend on
 `127.0.0.1:8000` (CORS is pre-scoped to `localhost`/`127.0.0.1` in
 `api/main.py`). From the dashboard:
 
-- **Run session** — starts a continuous watchlist loop: Opportunity
-  Discovery selects the traded watchlist once at session start, then one
-  evaluation pass every 5 minutes during NSE hours (09:15–15:30 IST),
-  idle-polling outside them, with all open positions force-flattened the
-  instant the session crosses 15:15 IST.
+- **Run session** — starts a continuous watchlist loop (`POST
+  /session/start`): Opportunity Discovery selects the traded watchlist once
+  at session start, then one evaluation pass every 5 minutes for as long as
+  the market is open. Ends itself, flattening every open position first,
+  the instant it crosses the `SESSION_SQUARE_OFF` (15:15 IST) boundary --
+  `/session/progress` then reports `phase: "market_closed"` instead of
+  silently idling until the next trading day. Starting outside market hours
+  ends the session the same way, immediately. Click **Stop session**
+  (`POST /session/stop`) to end it early instead.
 - **Autonomous / Manual toggle** — autonomous auto-executes every
   BUY/SELL/SWITCH; manual instead queues each as a suggestion card you
   approve, executing at a freshly re-fetched price when you click it.

@@ -22,13 +22,24 @@ const PHASE_LABEL: Record<string, string> = {
   discovering: "Screening universe…",
   evaluating: "Evaluating…",
   executing: "Executing trades…",
+  stopped: "Stopped",
+  market_closed: "Market closed",
   error: "Error",
 };
 
-/** Live status of a running /watchlist/run or /replay/run pass, polled from
- * GET /session/progress -- gives the dashboard a pulse (stocks loaded,
- * screener narrowing the universe, which symbol is being evaluated right
- * now) instead of looking frozen for however long a full pass takes. */
+const MODE_LABEL: Record<string, string> = {
+  replay: "Replay demo",
+  live: "Live session",
+  watchlist: "Watchlist cycle",
+};
+
+/** Live status of a running /watchlist/run, /replay/run, or /session/start
+ * pass, polled from GET /session/progress -- gives the dashboard a pulse
+ * (stocks loaded, screener narrowing the universe, which symbol is being
+ * evaluated right now) instead of looking frozen for however long a full
+ * pass takes. For a live session, "idle" recurs between passes (still
+ * running) -- only "stopped"/"market_closed"/"error" mean it has actually
+ * ended. */
 export function renderProgressPanel(container: HTMLElement, progress: SessionProgress | null): void {
   container.innerHTML = "";
 
@@ -49,7 +60,7 @@ export function renderProgressPanel(container: HTMLElement, progress: SessionPro
   if (progress.mode) {
     const modeEl = document.createElement("span");
     modeEl.className = "progress-mode";
-    modeEl.textContent = progress.mode === "replay" ? "Replay demo" : "Watchlist cycle";
+    modeEl.textContent = MODE_LABEL[progress.mode] ?? progress.mode;
     header.appendChild(modeEl);
   }
 
