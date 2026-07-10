@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     breeze_api_secret: str = ""
     breeze_session_token: str = ""
 
+    # Comma-separated exact origins for the deployed frontend, e.g.
+    # "https://committee.example.com,https://staging.committee.example.com".
+    # Empty (the default) keeps api/main.py's existing localhost-only regex
+    # for local dev -- set this in production so a frontend served from a
+    # real origin isn't CORS-blocked, without loosening the dev default.
+    cors_allowed_origins: str = ""
+
 
 settings = Settings()
 

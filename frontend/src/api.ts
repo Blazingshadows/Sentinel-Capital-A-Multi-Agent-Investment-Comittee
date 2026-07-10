@@ -10,7 +10,13 @@ import type {
   TradeRow,
 } from "./types";
 
-const BASE_URL = "http://127.0.0.1:8001";
+// Resolved at page-load time from /env-config.js (see public/env-config.js and
+// frontend/docker-entrypoint.sh, which regenerates it from $API_BASE_URL at
+// container startup) so one built image can point at any backend without a
+// rebuild -- Vite's import.meta.env.* is baked in at build time instead, which
+// would mean a separate build per deployment target. Falls back to the local dev
+// API port when env-config.js hasn't been generated (e.g. `vite dev`).
+const BASE_URL = window.__ENV__?.API_BASE_URL ?? "http://127.0.0.1:8001";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`);

@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.committee.audit.report import cost_breakdown_by_symbol, summarize_pnl
-from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE
+from backend.committee.config import BUYING_POWER, CAPITAL, LEVERAGE, settings
 from backend.committee.execution.portfolio import Portfolio
 from backend.committee.market_data.context import build_context
 from backend.committee.orchestration.cycle import finalize_cycle, run_cycle
@@ -62,12 +62,17 @@ app = FastAPI(title="Autonomous Multi-Agent Investment Committee", lifespan=life
 # development; loosest-that's-still-scoped since this never leaves localhost.
 # Regex (not a fixed port) because Vite silently bumps to 5174/5175/... when
 # 5173 is already taken by another dev server instance.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+#
+# In production the frontend is served from a real origin, not localhost --
+# set CORS_ALLOWED_ORIGINS (comma-separated exact origins) to add those
+# without loosening the dev regex below into something that'd also accept
+# an attacker-controlled "http://localhost.evil.com"-style origin.
+_cors_kwargs: dict = {"allow_origin_regex": r"http://(localhost|127\.0\.0\.1):\d+"}
+if settings.cors_allowed_origins:
+    _cors_kwargs = {
+        "allow_origins": [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
+    }
+app.add_middleware(CORSMiddleware, allow_methods=["*"], allow_headers=["*"], **_cors_kwargs)
 
 
 def _decision_to_dict(row) -> dict:

@@ -1,0 +1,90 @@
+name: CI/CD
+
+# Policy: Docker images are only ever built and published by this pipeline,
+# never `docker push`ed from a local machine (see docs/DEPLOYMENT.md). The
+# publish job below is gated on both test jobs passing AND only fires on
+# `main` -- a PR (or a push to any other branch) runs the tests and stops
+# there, so a change that breaks the backend or fails to build the frontend
+# never reaches an image, let alone production.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      - name: Run backend test suite
+        run: pytest backend/committee/tests -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Typecheck + build (tsc && vite build)
+        run: npm run build
+
+  docker-publish:
+    # Only after both test jobs pass, and only for a real push to main --
+    # never for a pull_request event, so a fork/PR can't trigger a publish.
+    needs: [backend-tests, frontend-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-backend:latest
+            ghcr.io/${{ github.repository }}-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-frontend:latest
+            ghcr.io/${{ github.repository }}-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

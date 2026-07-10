@@ -1,0 +1,45 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      # Overrides .env's file-relative default so the DB lands on the named
+      # volume below rather than inside the (ephemeral) container filesystem.
+      DATABASE_URL: sqlite:///./data/committee.db
+    volumes:
+      - committee-db:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "8080:80"
+    environment:
+      # Container-to-container calls stay inside the compose network; a
+      # browser tab hitting this URL needs it reachable from the host too,
+      # so this only works out of the box because backend also publishes
+      # 8001 to the host above. Point this at a real public backend URL
+      # instead when deploying frontend and backend to separate hosts.
+      API_BASE_URL: http://127.0.0.1:8001
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Named (not bind-mounted) so `docker compose down` (without -v) preserves
+  # trade history/portfolio state across a rebuild -- only `down -v` or
+  # `volume rm` wipes it.
+  committee-db:
